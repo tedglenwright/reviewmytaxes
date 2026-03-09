@@ -1144,6 +1144,39 @@ function renderReturn(r) {
     }
   }
 
+  // Important Notices (personalized alerts)
+  const notices = [];
+  if (r.refundOrOwed < -1000) {
+    notices.push({ icon: '&#x26a0;&#xfe0f;', color: 'var(--red)', title: 'You may owe a penalty', text: `You owe $${fmt(Math.abs(r.refundOrOwed))}. If you didn't make estimated payments, you could face an underpayment penalty. Consider paying by April 15.` });
+  }
+  if (r.totalWages > TAX.ssWageBase) {
+    notices.push({ icon: '&#x1f4b5;', color: 'var(--accent-light)', title: 'Social Security wage cap reached', text: `Your wages ($${fmt(r.totalWages)}) exceed the SS wage base ($${fmt(TAX.ssWageBase)}). No Social Security tax on earnings above this amount.` });
+  }
+  if (r.niit > 0) {
+    notices.push({ icon: '&#x1f4c8;', color: 'var(--orange)', title: 'Net Investment Income Tax applies', text: `You owe $${fmt(r.niit)} in NIIT (3.8%) on investment income above the threshold. This is in addition to regular income tax.` });
+  }
+  if (r.amt > 0) {
+    notices.push({ icon: '&#x1f6a8;', color: 'var(--red)', title: 'Alternative Minimum Tax triggered', text: `Your AMT is $${fmt(r.amt)}. This typically affects high-income taxpayers with large deductions or incentive stock options.` });
+  }
+  if (r.schedules.D && r.schedules.D.capitalLossCarryover > 0) {
+    notices.push({ icon: '&#x1f4ca;', color: 'var(--accent-light)', title: 'Capital loss carryforward', text: `You have $${fmt(r.schedules.D.capitalLossCarryover)} in unused capital losses carrying forward to ${TAX.year + 1}. These will offset future gains.` });
+  }
+  if (r.schedules['3'] && r.schedules['3'].eitcCredit > 0) {
+    notices.push({ icon: '&#x2705;', color: 'var(--green)', title: 'Earned Income Credit applies', text: `You qualify for $${fmt(r.schedules['3'].eitcCredit)} in EITC. This is a refundable credit — you get it even if you owe no tax.` });
+  }
+  if (notices.length > 0) {
+    html += sectionHeader('Important Notices', 'Based on your return');
+    html += `<div style="display:grid;gap:8px;margin-bottom:16px">`;
+    notices.forEach(n => {
+      html += `<div style="padding:12px 16px;background:var(--surface);border-left:3px solid ${n.color};border-radius:0 8px 8px 0;display:flex;gap:10px;align-items:flex-start">
+        <div style="font-size:18px;flex-shrink:0">${n.icon}</div>
+        <div><div style="font-size:13px;font-weight:700;color:${n.color}">${n.title}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.4">${n.text}</div></div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
   // Next Steps
   const unansweredCount = r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length;
   html += `
