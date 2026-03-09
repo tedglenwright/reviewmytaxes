@@ -1481,11 +1481,27 @@ function renderPricing() {
 }
 
 function renderDocuments(r) {
+  // Count documents by type
+  const docCounts = {};
+  if (r.w2s?.length) docCounts['W-2'] = r.w2s.length;
+  if (r.interest?.length) docCounts['1099-INT'] = r.interest.length;
+  if (r.dividends?.length) docCounts['1099-DIV'] = r.dividends.length;
+  if (r.schedules?.form8949?.length) docCounts['1099-B'] = r.schedules.form8949.length;
+  if (r._necSources?.length) docCounts['1099-NEC'] = r._necSources.length;
+  if (r._mortgageSources?.length) docCounts['1098'] = r._mortgageSources.length;
+  if (r.retirementDist?.length) docCounts['1099-R'] = r.retirementDist.length;
+  const totalDocs = Object.values(docCounts).reduce((s, v) => s + v, 0);
+  const hasUploaded = r.w2s?.some(w => w._sourceURL) || r.interest?.some(i => i._sourceURL);
+
   let html = `
     <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">Uploaded Documents</h2>
-    <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
-      Click any document to view the original. All documents are stored in your browser memory only.
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">
+      ${hasUploaded ? 'Click any document to view the original.' : 'Using demo data.'} All data is stored in your browser memory only.
     </p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+      ${Object.entries(docCounts).map(([type, count]) => `<span style="padding:4px 10px;background:rgba(59,130,246,0.1);border:1px solid var(--accent);border-radius:16px;font-size:11px;color:var(--accent-light);font-weight:600">${type} × ${count}</span>`).join('')}
+      <span style="padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:16px;font-size:11px;color:var(--text-muted);font-weight:600">${totalDocs} total</span>
+    </div>
   `;
 
   // W-2s
