@@ -350,6 +350,30 @@
   .form8949-table tr[onclick] { cursor: pointer; transition: background 0.15s; }
   .form8949-table tr[onclick]:hover { background: rgba(139,92,246,0.08); }
 
+  /* Tab content animation */
+  .tab-fade-in { animation: tabFadeIn 0.2s ease; }
+  @keyframes tabFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Refinement progress bar */
+  .refine-progress { display: flex; gap: 4px; margin-bottom: 16px; }
+  .refine-dot {
+    flex: 1; height: 6px; border-radius: 3px; background: var(--surface-light);
+    transition: background 0.3s;
+  }
+  .refine-dot.complete { background: var(--green); }
+  .refine-dot.current { background: var(--accent); animation: pulse 1.5s infinite; }
+
+  /* Toast styles */
+  .app-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 10000; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    animation: slideUp 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    max-width: 90vw;
+  }
+  .app-toast.success { background: var(--green-dark); color: #fff; }
+  .app-toast.error { background: var(--red-dark); color: #fff; }
+  .app-toast.info { background: var(--accent); color: #fff; }
+
   /* Print styles */
   @media print {
     body { background: #fff; color: #000; }
@@ -385,7 +409,7 @@
 // ═══════════════════════════════════════════════════════════════
 // CONFIGURATION — Change this to your GitHub repo URL after setup
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v0.4.0-beta';
+const APP_VERSION = 'v0.5.0-beta';
 const GITHUB_REPO = 'https://github.com/tedglenwright/reviewmytaxes';
 const GITHUB_SOURCE = GITHUB_REPO + '/blob/main/index.html';
 const GITHUB_ISSUES = GITHUB_REPO + '/issues';
@@ -1398,7 +1422,6 @@ let STATE = {
   screen: 'upload', // upload | parsing | review
   files: [],
   parsedDocs: [],
-  sourceFileURLs: [], // object URLs for uploaded files, parallel to parsedDocs
   taxData: null,
   result: null,
   tab: 'return',
@@ -1894,6 +1917,7 @@ function renderReview() {
       <div style="display:flex;align-items:center;gap:8px">
         ${totalCost > 0 ? `<div class="cost-badge">${pricedQs} question${pricedQs>1?'s':''} · $${totalCost}</div>` : ''}
         <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
+        <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
         <span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span>
       </div>
@@ -1904,7 +1928,7 @@ function renderReview() {
       <button class="tab-btn ${STATE.tab==='documents'?'active':''}" onclick="setTab('documents')">Documents</button>
       <button class="tab-btn ${STATE.tab==='pricing'?'active':''}" onclick="setTab('pricing')">Pricing</button>
     </div>
-    <div class="container">
+    <div class="container tab-fade-in">
       ${STATE.tab === 'return' ? renderReturn(r) : ''}
       ${STATE.tab === 'assumptions' ? renderAssumptions(r) : ''}
       ${STATE.tab === 'documents' ? renderDocuments(r) : ''}
@@ -2302,6 +2326,13 @@ function renderAssumptions(r) {
       ${paidCount > 0 ? `<div style="margin-top:8px;padding:8px 12px;background:rgba(34,197,94,0.08);border:1px solid var(--green-dark);border-radius:6px;font-size:12px;color:var(--green)">
         &#x2713; ${paidCount} assumption${paidCount>1?'s':''} refined · Return recalculated
       </div>` : ''}
+    </div>
+    <div class="refine-progress">
+      ${r.assumptions.filter(a => getAssumptionForm(a.id)).map((a, i) => {
+        const done = STATE.answeredQs.has(a.id);
+        const nextUnanswered = !done && !r.assumptions.filter(a2 => getAssumptionForm(a2.id)).slice(0, i).some(a2 => !STATE.answeredQs.has(a2.id));
+        return `<div class="refine-dot ${done ? 'complete' : (nextUnanswered ? 'current' : '')}" title="${a.text.substring(0, 60)}"></div>`;
+      }).join('')}
     </div>
   `;
 
@@ -3052,7 +3083,7 @@ function sumEstPayments() {
   const q4 = parseFloat(document.getElementById('modal-est-q4')?.value) || 0;
   const total = q1 + q2 + q3 + q4;
   const el = document.getElementById('modal-est-payments');
-  if (el && total > 0) el.value = total;
+  if (el) el.value = total;
 }
 
 function showToast(message, type) {
@@ -3118,6 +3149,64 @@ function shareSummary() {
   }
 }
 
+function downloadSummary() {
+  const r = STATE.result;
+  if (!r) return;
+  const lines = [
+    '═══════════════════════════════════════════════════════',
+    '  DRAFT TAX RETURN SUMMARY — NOT FOR FILING',
+    `  Tax Year ${TAX.year} · Generated ${new Date().toLocaleDateString()}`,
+    '═══════════════════════════════════════════════════════',
+    '',
+    `Filing Status:         ${FS_LABELS[r.filingStatus]}`,
+    '',
+    '── INCOME ──────────────────────────────────────────────',
+  ];
+  r.w2s.forEach((w, i) => lines.push(`  W-2 (${w.employer || 'Employer '+(i+1)}): Wages $${fmt(w.wages)}, Fed WH $${fmt(w.fedWithheld)}`));
+  if (r.totalInterest > 0) lines.push(`  Interest income:       $${fmt(r.totalInterest)}`);
+  if (r.totalOrdDiv > 0) lines.push(`  Ordinary dividends:    $${fmt(r.totalOrdDiv)}`);
+  if (r.schedCNet !== 0) lines.push(`  Business income (C):   $${fmt(r.schedCNet)}`);
+  if (r.netSTCG + r.netLTCG !== 0) lines.push(`  Capital gains/losses:  $${fmt(r.netSTCG + r.netLTCG)}`);
+  lines.push(`  Total Income:          $${fmt(r.totalIncome)}`);
+  lines.push('');
+  lines.push('── DEDUCTIONS & TAXABLE INCOME ─────────────────────────');
+  lines.push(`  Adjustments:           $${fmt(r.adjustments)}`);
+  lines.push(`  AGI:                   $${fmt(r.agi)}`);
+  lines.push(`  Deduction (${r.usingItemized ? 'Itemized' : 'Standard'}):  $${fmt(r.deduction)}`);
+  if (r.qbiDeduction > 0) lines.push(`  QBI Deduction:         $${fmt(r.qbiDeduction)}`);
+  lines.push(`  Taxable Income:        $${fmt(r.taxableIncome)}`);
+  lines.push('');
+  lines.push('── TAX CALCULATION ─────────────────────────────────────');
+  lines.push(`  Income Tax:            $${fmt(r.incomeTax)}`);
+  if (r.seTax > 0) lines.push(`  SE Tax:                $${fmt(r.seTax)}`);
+  if (r.niit > 0) lines.push(`  NIIT:                  $${fmt(r.niit)}`);
+  lines.push(`  Total Tax:             $${fmt(r.totalTax)}`);
+  lines.push('');
+  lines.push('── PAYMENTS & RESULT ───────────────────────────────────');
+  lines.push(`  Federal Withheld:      $${fmt(r.totalFedWithheld)}`);
+  if (r.estimatedPayments > 0) lines.push(`  Estimated Payments:    $${fmt(r.estimatedPayments)}`);
+  lines.push(`  Total Payments:        $${fmt(r.totalPayments)}`);
+  lines.push('');
+  lines.push(`  ${r.refundOrOwed >= 0 ? 'ESTIMATED REFUND' : 'AMOUNT OWED'}:      $${fmt(Math.abs(r.refundOrOwed))}`);
+  lines.push(`  Effective Rate:        ${r.effectiveRate.toFixed(1)}%`);
+  lines.push(`  Marginal Rate:         ${r.marginalRate}%`);
+  lines.push('');
+  lines.push('═══════════════════════════════════════════════════════');
+  lines.push('  DRAFT — NOT FOR FILING');
+  lines.push('  Generated by ReviewMyTaxes · ' + APP_VERSION);
+  lines.push('  This is an estimate only. Consult a tax professional.');
+  lines.push('═══════════════════════════════════════════════════════');
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tax-draft-${TAX.year}-summary.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Summary downloaded', 'success');
+}
+
 function showVerifyPanel() {
   const panel = document.getElementById('verify-panel');
   if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
@@ -3161,6 +3250,15 @@ function showAuditResults(results) {
       new Date().toLocaleTimeString() + '</div>';
   }
 }
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const assumptionModal = document.getElementById('assumption-modal');
+    if (assumptionModal) { closeAssumptionModal(); return; }
+    closeSourceDoc();
+  }
+});
 
 // Initial render
 render();
