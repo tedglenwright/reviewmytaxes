@@ -567,7 +567,7 @@ const GITHUB_LICENSE = GITHUB_REPO + '/blob/main/LICENSE';
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_51T8wONRsVTiXg9w7lAViMeXUo3BjYuVQ5CPjfHIFjPOCd0tVRqSehgbfpTT3xJwagQnuOgBNzE7r0e9HUr7f51pY00cUcmUkO6';
 // TODO: Replace with your Stripe Payment Links (created in Stripe Dashboard)
 const STRIPE_PAYMENT_LINKS = {
-  three_questions: 'https://buy.stripe.com/6oU3cxfEC10pfokgNV1Nu00', // $5 for 3 questions payment link
+  per_question: 'https://buy.stripe.com/6oU3cxfEC10pfokgNV1Nu00', // $5 per question payment link
 };
 let stripeInstance = null;
 try {
@@ -582,8 +582,8 @@ try {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('paid')) {
     const paidCount = parseInt(urlParams.get('paid')) || 0;
-    localStorage.setItem('rmt_payment', JSON.stringify({ paidQuestions: paidCount, usedQuestions: 0, timestamp: Date.now() }));
-    PAID_QUESTIONS = paidCount;
+    localStorage.setItem('rmt_payment', JSON.stringify({ paidQuestions: 1, usedQuestions: 0, timestamp: Date.now() }));
+    PAID_QUESTIONS = 1;
     // Clean up URL without reloading
     window.history.replaceState({}, '', window.location.pathname);
   } else {
@@ -1651,6 +1651,48 @@ function computeTaxReturn(data) {
     assumptions.push({ id:'cost_basis', text:'Used cost basis as reported on 1099-B; did not adjust for wash sales', impact:'high' });
   }
 
+  // Home sale exclusion (Section 121)
+  let homeSaleGain = 0, homeSaleExclusion = 0, homeSaleTaxable = 0;
+  if (data.homeSale) {
+    const gain = (data.homeSale.salePrice || 0) - (data.homeSale.basis || 0);
+    homeSaleGain = Math.max(0, gain);
+    const maxExclusion = fs === 'mfj' ? 500000 : 250000;
+    homeSaleExclusion = Math.min(homeSaleGain, maxExclusion);
+    homeSaleTaxable = homeSaleGain - homeSaleExclusion;
+    if (homeSaleTaxable > 0) {
+      // Add taxable portion to LTCG
+      netLTCG += homeSaleTaxable;
+      assumptions.push({ id:'home_sale', text:'Home sale gain of $' + homeSaleGain.toLocaleString() + ': excluded $' + homeSaleExclusion.toLocaleString() + ' (Section 121), $' + homeSaleTaxable.toLocaleString() + ' is taxable', impact:'high' });
+    } else if (homeSaleGain > 0) {
+      assumptions.push({ id:'home_sale', text:'Home sale gain of $' + homeSaleGain.toLocaleString() + ' fully excluded under Section 121 ($' + (fs === 'mfj' ? '500,000' : '250,000') + ' limit)', impact:'low' });
+    }
+  }
+
+  // 1031 Like-Kind Exchange (Form 8824)
+  let exchange1031Deferred = 0, exchange1031Boot = 0;
+  if (data.exchange1031) {
+    const ex = data.exchange1031;
+    const relinquishedFMV = ex.relinquishedFMV || 0;
+    const relinquishedBasis = ex.relinquishedBasis || 0;
+    const replacementFMV = ex.replacementFMV || 0;
+    const realizedGain = Math.max(0, relinquishedFMV - relinquishedBasis);
+    // Boot = cash or non-like-kind property received
+    exchange1031Boot = Math.max(0, relinquishedFMV - replacementFMV + (ex.bootReceived || 0) - (ex.bootPaid || 0));
+    exchange1031Boot = Math.min(exchange1031Boot, realizedGain); // Can't recognize more than realized gain
+    exchange1031Deferred = realizedGain - exchange1031Boot;
+    if (exchange1031Boot > 0) {
+      // Boot is taxable as capital gain
+      netLTCG += exchange1031Boot;
+    }
+    if (exchange1031Deferred > 0) {
+      assumptions.push({ id:'1031_deferred', text:'1031 exchange deferred gain of $' + exchange1031Deferred.toLocaleString() + ' — basis of replacement property reduced accordingly', impact:'high' });
+    }
+    if (exchange1031Boot > 0) {
+      assumptions.push({ id:'1031_boot', text:'1031 exchange boot received: $' + exchange1031Boot.toLocaleString() + ' is recognized as taxable gain', impact:'high' });
+    }
+    schedules.form8824 = { relinquishedFMV, relinquishedBasis, replacementFMV, realizedGain, deferredGain: exchange1031Deferred, recognizedGain: exchange1031Boot, bootReceived: ex.bootReceived || 0, bootPaid: ex.bootPaid || 0, description: ex.description || '1031 Like-Kind Exchange' };
+  }
+
   // Retirement Distributions (1099-R)
   let totalRetirement = 0, retirementFedWithheld = 0, retirementStateWithheld = 0;
   if (data.retirementDist && data.retirementDist.length > 0) {
@@ -1660,6 +1702,12 @@ function computeTaxReturn(data) {
     totalFedWithheld += retirementFedWithheld;
     totalStateWithheld += retirementStateWithheld;
     assumptions.push({ id:'1099r_taxable', text:'Assumed entire 1099-R distribution is taxable (Box 2a)', impact:'high' });
+  }
+
+  const qcd = Math.min(data.qcd || 0, totalRetirement, 105000);
+  if (qcd > 0) {
+    totalRetirement -= qcd;
+    assumptions.push({ id:'qcd_applied', text:'QCD of $' + qcd.toLocaleString() + ' excluded from retirement income', impact:'high' });
   }
 
   // Other income (Schedule 1 Part I)
@@ -1797,7 +1845,15 @@ function computeTaxReturn(data) {
   const numOtherDeps = data.numOtherDeps || 0;
   const childTaxCredit = numChildren * 2000;
   const otherDepCredit = numOtherDeps * 500;
-  const educationCredit = data.educationCredit || 0;
+  let educationCredit = data.educationCredit || 0;
+  if (educationCredit === 0 && data.tuitionPaid > 0 && data.numStudents > 0) {
+    const perStudent = Math.min(data.tuitionPaid / data.numStudents, 4000);
+    const aotcPerStudent = Math.min(perStudent, 2000) + Math.min(Math.max(0, perStudent - 2000), 2000) * 0.25;
+    educationCredit = Math.round(aotcPerStudent * data.numStudents);
+    // Make 40% refundable
+    const refundableEdu = Math.round(educationCredit * 0.4);
+    // We'll handle this in credits section
+  }
   // Earned Income Tax Credit (EITC) - auto-calculate
   let eitcCredit = 0;
   const earnedIncome = totalWages + Math.max(0, schedCNet);
@@ -1891,6 +1947,15 @@ function computeTaxReturn(data) {
   }
   if (!data.priorRefund) assumptions.push({ id:'prior_refund', text:'Did not include prior-year state/local tax refund (taxable if you itemized last year)', impact:'medium' });
   if (!data.premiumTaxCredit) assumptions.push({ id:'ptc', text:'Did not calculate Premium Tax Credit — add if you had Marketplace health insurance', impact:'medium' });
+  if (!data.homeSale) assumptions.push({ id:'no_home_sale', text:'No home sale reported — if you sold your primary residence, you may qualify for up to $' + (fs === 'mfj' ? '500,000' : '250,000') + ' exclusion', impact:'low' });
+  if (!data.exchange1031) assumptions.push({ id:'exchange_1031', text:'No 1031 like-kind exchange reported — if you exchanged investment/business real property, gain may be deferred (Form 8824)', impact:'medium' });
+  if (totalRetirement > 0 && !data.qcd) {
+    assumptions.push({ id:'qcd', text:'No Qualified Charitable Distribution (QCD) reported — if you are 70½+ and donated from your IRA, up to $105,000 is excluded from income', impact:'medium' });
+  }
+  if (!data.studentLoanInterest && !data.tuitionPaid) {
+    assumptions.push({ id:'education_expenses', text:'No education expenses reported — student loan interest (up to $2,500) and tuition may provide deductions or credits', impact:'medium' });
+  }
+  assumptions.push({ id:'crypto', text:'Assumed no digital asset transactions — if you sold, traded, or received crypto, this must be reported', impact:'medium' });
 
   // State tax
   let stateResult = null;
@@ -1917,6 +1982,8 @@ function computeTaxReturn(data) {
     totalWages, totalInterest, totalOrdDiv, totalQualDiv, totalRetirement,
     ssaBenefits: data.ssaBenefits || 0, ssaTaxable, ssaFedWithheld,
     retirementDist: data.retirementDist || [],
+    homeSaleGain, homeSaleExclusion, homeSaleTaxable,
+    exchange1031Deferred, exchange1031Boot,
     schedCNet, schedENet, netSTCG, netLTCG, capitalLossCarryover,
     totalIncome, otherIncome, adjustments, agi, deduction, usingItemized,
     qbiDeduction, taxableIncome, ordinaryTax, ltcgTax, incomeTax,
@@ -2455,7 +2522,7 @@ function renderUpload() {
 
       ${STATE.files.length === 0 ? `
       <div style="margin-top: 28px; animation: fade-up 0.6s ease-out 0.3s both;">
-        <div style="color: var(--text-dim); font-size: 12px; text-align: center; margin-bottom: 12px; font-weight: 500;">— or try with sample data (not your documents) —</div>
+        <div style="color: var(--text-muted); font-size: 22px; text-align: center; margin-bottom: 16px; font-weight: 800; letter-spacing: -0.5px;">— or try with sample data (not your documents) —</div>
         <div class="demo-grid">
           ${Object.entries(DEMOS).map(([key, d]) => `
             <button class="demo-card" onclick="loadDemo('${key}')">
@@ -2572,7 +2639,7 @@ function renderReview() {
         <span style="color:var(--text-muted);font-size:13px">${FS_LABELS[r.filingStatus]} · Tax Year ${TAX.year}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        ${answeredCount > 0 ? `<div class="cost-badge">${answeredCount} refined · $${Math.ceil(answeredCount/3)*5}${PAID_QUESTIONS > 0 ? ' ('+PAID_QUESTIONS+' left)' : ''}</div>` : ''}
+        ${answeredCount > 0 ? `<div class="cost-badge">${answeredCount} refined · $${answeredCount*5}</div>` : ''}
         <button onclick="emailSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Email tax summary">Email</button>
         <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
@@ -2671,7 +2738,7 @@ function renderReturn(r) {
         <div style="background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(34,197,94,0.08));border:1px solid var(--accent);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="setTab('assumptions')">
           <div>
             <div style="color:var(--accent-light);font-size:15px;font-weight:700">Your return could be more accurate</div>
-            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length} questions can improve your estimate · $5 for 3 questions</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length} questions can improve your estimate · $5 per question</div>
             ${(() => {
               const hasDeductions = !STATE.taxData.hsaContribution && !STATE.taxData.iraContribution;
               const hasDependents = !STATE.taxData.dependents;
@@ -2722,6 +2789,11 @@ function renderReturn(r) {
           return ssaHtml;
         })() : ''}
         ${r.schedCNet !== 0 ? lineItem('8. Business income (Schedule C)', r.schedCNet, {onClick: r._necSources.length > 0 ? 'showNECSource()' : ''}) : ''}
+        ${r.homeSaleGain > 0 ? `
+        ${lineItem('Home sale gain', r.homeSaleGain)}
+        ${lineItem('   Section 121 exclusion', -r.homeSaleExclusion, {sub:true})}
+        ${r.homeSaleTaxable > 0 ? lineItem('   Taxable gain (added to LTCG)', r.homeSaleTaxable, {sub:true}) : ''}
+        ` : ''}
         ${(r.netSTCG + r.netLTCG) !== 0 ? lineItem('7. Capital gain/loss (Schedule D)', r.netSTCG + r.netLTCG, {showSign:true, onClick: r.schedules.form8949 && r.schedules.form8949.some(t=>t._sourceURL) ? 'showCapGainSource(0)' : ''}) : ''}
         ${r.schedENet !== 0 ? lineItem('Schedule E rental income', r.schedENet, {showSign:true}) : ''}
         ${r.otherIncome > 0 ? lineItem('8. Other income (Schedule 1)', r.otherIncome) : ''}
@@ -2819,6 +2891,29 @@ function renderReturn(r) {
           <span style="font-weight:600">$${fmt(r.underpaymentPenalty)}</span>
         </div>
         ` : ''}
+        ${(() => {
+  if (r.totalFedWithheld <= 0) return '';
+  const effectiveWithholdingRate = (r.totalFedWithheld / r.totalIncome * 100);
+  const idealRate = (r.totalTax / r.totalIncome * 100);
+  const diff = effectiveWithholdingRate - idealRate;
+  const overUnder = diff > 1 ? 'over-withheld' : diff < -1 ? 'under-withheld' : 'on-track';
+  const color = overUnder === 'on-track' ? 'var(--green)' : overUnder === 'over-withheld' ? 'var(--accent-light)' : 'var(--orange)';
+  return `
+  <div style="margin-top:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px">Withholding Analysis</div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+      <span style="color:var(--text-muted)">Your withholding rate</span>
+      <span style="color:var(--text);font-weight:600">${effectiveWithholdingRate.toFixed(1)}%</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+      <span style="color:var(--text-muted)">Ideal withholding rate</span>
+      <span style="color:var(--text);font-weight:600">${idealRate.toFixed(1)}%</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px;padding-top:6px;border-top:1px solid var(--surface-light)">
+      <span style="color:${color};font-weight:600">${overUnder === 'on-track' ? 'Withholding is on track' : overUnder === 'over-withheld' ? 'Slightly over-withheld (you get a bigger refund)' : 'Under-withheld — consider adjusting your W-4'}</span>
+    </div>
+  </div>`;
+})()}
         ${r.refundOrOwed < 0 && r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
         <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
           <span style="font-size:14px">&#x1F4A1;</span> Refinements could reduce what you owe <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
@@ -3006,6 +3101,21 @@ function renderReturn(r) {
     if (d.capitalLossCarryover > 0) html += lineItem('Capital loss carryforward to 2026', d.capitalLossCarryover, {sub:true});
   }
 
+  // Form 8824 — Like-Kind Exchange
+  if (r.schedules.form8824) {
+    const ex = r.schedules.form8824;
+    html += sectionHeader('Form 8824 — Like-Kind Exchange (1031)', 'Form 8824');
+    if (ex.description) html += `<div class="line-item sub"><span style="color:var(--text-muted);font-style:italic">${esc(ex.description)}</span><span></span></div>`;
+    html += lineItem('FMV of relinquished property', ex.relinquishedFMV);
+    html += lineItem('Adjusted basis', ex.relinquishedBasis, {sub:true});
+    html += lineItem('Realized gain', ex.realizedGain, {bold:true});
+    html += lineItem('FMV of replacement property', ex.replacementFMV);
+    if (ex.bootReceived > 0) html += lineItem('Boot received (cash/other)', ex.bootReceived, {sub:true});
+    if (ex.bootPaid > 0) html += lineItem('Boot paid', ex.bootPaid, {sub:true});
+    html += lineItem('Recognized gain (taxable)', ex.recognizedGain, {bold:true, showSign:true});
+    html += lineItem('Deferred gain', ex.deferredGain, {sub:true, color:'var(--green)'});
+  }
+
   // Form 8949
   if (r.schedules.form8949) {
     html += sectionHeader('Form 8949 — Sales of Capital Assets', 'Form 8949');
@@ -3099,12 +3209,11 @@ function renderAssumptions(r) {
   const unanswered = r.assumptions.filter(a => !STATE.answeredQs.has(a.id));
   const answeredList = r.assumptions.filter(a => STATE.answeredQs.has(a.id));
   const answeredCount = STATE.answeredQs.size;
-  const blocksUsed = Math.ceil(answeredCount / 3);
   const statusText = PAID_QUESTIONS > 0
-    ? PAID_QUESTIONS + ' question' + (PAID_QUESTIONS !== 1 ? 's' : '') + ' remaining in your block'
+    ? '1 question ready to use'
     : answeredCount === 0
-      ? 'First 3 refinements for $5 total'
-      : 'Buy another block of 3 questions for $5';
+      ? '$5 per question to refine your return'
+      : 'Pay $5 to refine another question';
 
   let html = `
     <div style="margin-bottom:16px">
@@ -3114,7 +3223,7 @@ function renderAssumptions(r) {
       </p>
       <div style="margin-top:10px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div>
-          <div style="color:var(--accent-light);font-size:14px;font-weight:700">$5 for 3 questions</div>
+          <div style="color:var(--accent-light);font-size:14px;font-weight:700">$5 per question</div>
           <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${statusText}</div>
         </div>
         <div style="color:var(--accent-light);font-size:20px;font-weight:800">$5</div>
@@ -3136,7 +3245,7 @@ function renderAssumptions(r) {
     html += `<div style="color:var(--text-dim);font-size:12px;margin-bottom:8px;font-weight:600">Needs your input (${unanswered.length})</div>`;
     unanswered.forEach((a, i) => {
       const canInteract = getAssumptionForm(a.id) !== null;
-      const needsPayment = canInteract && PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions;
+      const needsPayment = canInteract && PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.per_question;
       const hintMap = {
         'filing_status': 'Changing filing status can save thousands',
         'dependents': 'Child Tax Credit = $2,000 per qualifying child',
@@ -3155,7 +3264,7 @@ function renderAssumptions(r) {
             ${hint ? '<div style="color:var(--green);font-size:11px;margin-top:4px;font-weight:600">' + hint + '</div>' : ''}
           </div>
           <button class="btn-answer" onclick="answerQuestion('${a.id}')" style="${canInteract ? 'padding:8px 16px;font-size:13px' : ''}${needsPayment ? ';background:var(--green)' : ''}">
-            ${!canInteract ? 'OK' : needsPayment ? 'Pay $5 → Refine' : PAID_QUESTIONS > 0 ? 'Refine' : 'Refine'}
+            ${!canInteract ? 'OK' : needsPayment ? 'Pay $5 → Refine' : 'Refine'}
           </button>
         </div>
       `;
@@ -3202,11 +3311,11 @@ function renderPricing() {
         </div>
         <div>
           <div style="font-size:28px;font-weight:800;color:var(--accent-light)">$5</div>
-          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">For 3 questions to refine</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Per question to refine</div>
         </div>
         <div>
-          <div style="font-size:28px;font-weight:800;color:var(--accent-light)">$5</div>
-          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Every 3 questions after</div>
+          <div style="font-size:28px;font-weight:800;color:var(--accent-light)">Simple</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Pay only for what you need</div>
         </div>
       </div>
     </div>
@@ -3228,7 +3337,7 @@ function renderPricing() {
       <div class="pricing-card featured">
         <div style="color:var(--accent-light);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 2</div>
         <div class="price" style="color:var(--accent-light)">$5</div>
-        <div class="plan">3 Questions to Refine</div>
+        <div class="plan">Refine Your Return</div>
         <div class="features" style="text-align:left;padding:0 8px">
           &#x2713; Change filing status<br>
           &#x2713; Add dependents & credits<br>
@@ -3242,11 +3351,11 @@ function renderPricing() {
       <div class="pricing-card green">
         <div style="color:var(--green);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 3</div>
         <div class="price" style="color:var(--accent-light)">$5</div>
-        <div class="plan">Every 3 Questions</div>
+        <div class="plan">Pay As You Go</div>
         <div class="features" style="text-align:left;padding:0 8px">
-          &#x2713; $5 per block of 3 questions<br>
+          &#x2713; $5 per question<br>
           &#x2713; No subscription required<br>
-          &#x2713; Pay only when you need more<br>
+          &#x2713; Pay only for what you need<br>
           &#x2713; No account needed<br>
           &#x2713; Nothing stored anywhere
         </div>
@@ -3269,7 +3378,7 @@ function renderPricing() {
           <tbody>
             <tr style="border-bottom:1px solid var(--surface-light)">
               <td style="padding:8px;color:var(--text-muted)">Price</td>
-              <td style="text-align:center;padding:8px;color:var(--green);font-weight:600">$5 per 3 questions</td>
+              <td style="text-align:center;padding:8px;color:var(--green);font-weight:600">$5 per question</td>
               <td style="text-align:center;padding:8px;color:var(--text-muted)">$0–$129+</td>
               <td style="text-align:center;padding:8px;color:var(--text-muted)">$200–$500+</td>
             </tr>
@@ -3460,7 +3569,7 @@ function renderDocuments(r) {
   }
 
   const answeredCount = STATE.answeredQs.size;
-  const needsPayment = PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions;
+  const needsPayment = PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.per_question;
   html += `
     <div style="margin-top:24px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;text-align:center">
       <div style="font-size:14px;font-weight:600;margin-bottom:8px">Have more documents to add?</div>
@@ -3469,7 +3578,7 @@ function renderDocuments(r) {
         ${needsPayment ? 'Pay $5 → Upload More' : 'Upload More Documents'}
         <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp" style="display:none" onchange="handleAdditionalUpload(event)">
       </label>
-      <div style="color:var(--text-dim);font-size:11px;margin-top:8px">Each upload counts as 1 question${needsPayment ? ' · $5 for 3 questions' : ''}</div>
+      <div style="color:var(--text-dim);font-size:11px;margin-top:8px">Each upload counts as 1 question · $5 each</div>
     </div>
   `;
 
@@ -3588,8 +3697,8 @@ async function handleAdditionalUpload(event) {
   // Check payment gate
   const uploadKey = 'upload_additional_' + Date.now();
   if (!STATE.answeredQs.has(uploadKey)) {
-    if (PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions) {
-      window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
+    if (PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.per_question) {
+      window.location.href = STRIPE_PAYMENT_LINKS.per_question;
       return;
     }
     if (PAID_QUESTIONS > 0) {
@@ -3671,6 +3780,48 @@ async function handleAdditionalUpload(event) {
   render();
 }
 
+async function handle1031Upload(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+
+  // Each 1031 document upload costs $5
+  for (let i = 0; i < files.length; i++) {
+    const docKey = '1031_doc_' + Date.now() + '_' + i;
+    if (!STATE.answeredQs.has(docKey)) {
+      if (PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.per_question) {
+        window.location.href = STRIPE_PAYMENT_LINKS.per_question;
+        return;
+      }
+      if (PAID_QUESTIONS > 0) {
+        PAID_QUESTIONS--;
+        try {
+          const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
+          payment.usedQuestions = (payment.usedQuestions || 0) + 1;
+          localStorage.setItem('rmt_payment', JSON.stringify(payment));
+        } catch(e) {}
+      }
+      STATE.answeredQs.add(docKey);
+      try { sessionStorage.setItem('rmt_answered', JSON.stringify([...STATE.answeredQs])); } catch(e) {}
+    }
+  }
+
+  // Store file references for display
+  if (!STATE.exchange1031Docs) STATE.exchange1031Docs = [];
+  for (const file of files) {
+    STATE.exchange1031Docs.push({ name: file.name, url: URL.createObjectURL(file) });
+  }
+
+  // Update the docs list in the modal if still open
+  const docsList = document.getElementById('1031-docs-list');
+  if (docsList) {
+    docsList.innerHTML = STATE.exchange1031Docs.map(d =>
+      '<div style="padding:4px 0;border-bottom:1px solid var(--border)"><a href="' + d.url + '" target="_blank" style="color:var(--accent-light)">' + esc(d.name) + '</a></div>'
+    ).join('');
+  }
+
+  showToast(files.length + ' document' + (files.length > 1 ? 's' : '') + ' uploaded for 1031 exchange', 'success');
+}
+
 function goBack() {
   // Revoke object URLs to free memory
   if (STATE.result) {
@@ -3744,8 +3895,8 @@ function runScenario(scenarioId) {
   var compareKey = 'compare_' + scenarioId;
   if (!STATE.answeredQs.has(compareKey)) {
     if (PAID_QUESTIONS <= 0) {
-      if (STRIPE_PAYMENT_LINKS.three_questions) {
-        window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
+      if (STRIPE_PAYMENT_LINKS.per_question) {
+        window.location.href = STRIPE_PAYMENT_LINKS.per_question;
         return;
       }
     }
@@ -3843,11 +3994,11 @@ function runScenario(scenarioId) {
 function answerQuestion(id) {
   const formHtml = getAssumptionForm(id);
 
-  // Check if this is a paid question — every 3 questions costs $5
+  // Check if this is a paid question — $5 per question
   if (formHtml && !STATE.answeredQs.has(id) && PAID_QUESTIONS <= 0) {
     // Need payment — redirect to Stripe
-    if (STRIPE_PAYMENT_LINKS.three_questions) {
-      window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
+    if (STRIPE_PAYMENT_LINKS.per_question) {
+      window.location.href = STRIPE_PAYMENT_LINKS.per_question;
       return;
     }
     // If no payment link configured, allow free access (beta mode)
@@ -4211,6 +4362,106 @@ function getAssumptionForm(id) {
           </div>
         </div>
       `;
+    case 'no_home_sale':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">Did you sell your primary residence in ${TAX.year}?</label>
+          <div style="display:grid;gap:8px">
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Sale price</label>
+            <input type="number" id="modal-home-sale-price" min="0" step="1000" value="${(STATE.taxData.homeSale||{}).salePrice||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Original purchase price (cost basis)</label>
+            <input type="number" id="modal-home-basis" min="0" step="1000" value="${(STATE.taxData.homeSale||{}).basis||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+          </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>Section 121 exclusion:</strong> If you lived in the home for 2+ of the last 5 years, you can exclude up to $250,000 ($500,000 MFJ) of gain. Enter $0 if you didn't sell a home.
+        </div>
+      `;
+    case 'exchange_1031': {
+      const ex = STATE.taxData.exchange1031 || {};
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">1031 Like-Kind Exchange (Form 8824):</label>
+          <div style="display:grid;gap:8px">
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Property description</label>
+            <input type="text" id="modal-1031-desc" value="${esc(ex.description||'')}" placeholder="e.g., Rental property at 123 Main St" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">FMV of relinquished property (property you gave up)</label>
+            <input type="number" id="modal-1031-relinquished-fmv" min="0" step="1000" value="${ex.relinquishedFMV||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Adjusted basis of relinquished property</label>
+            <input type="number" id="modal-1031-relinquished-basis" min="0" step="1000" value="${ex.relinquishedBasis||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">FMV of replacement property (property you received)</label>
+            <input type="number" id="modal-1031-replacement-fmv" min="0" step="1000" value="${ex.replacementFMV||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Boot received (cash or non-like-kind property received)</label>
+            <input type="number" id="modal-1031-boot-received" min="0" step="100" value="${ex.bootReceived||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Boot paid (additional cash you put in)</label>
+            <input type="number" id="modal-1031-boot-paid" min="0" step="100" value="${ex.bootPaid||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+          </div>
+        </div>
+        <div style="margin-top:12px;padding:12px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px">
+          <div style="color:var(--accent-light);font-size:12px;font-weight:600;margin-bottom:4px">Upload supporting documents ($5 each)</div>
+          <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px">Upload closing statements, HUD-1, exchange agreement, or Form 8824</div>
+          <label style="display:inline-block;padding:6px 16px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">
+            Upload 1031 Documents
+            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp" style="display:none" onchange="handle1031Upload(event)">
+          </label>
+          <div id="1031-docs-list" style="margin-top:8px;font-size:11px;color:var(--text-muted)"></div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5;margin-top:12px">
+          <strong>Section 1031:</strong> Like-kind exchanges allow you to defer capital gains tax when exchanging investment or business real property for similar property. Any "boot" (cash or non-like-kind property received) is taxable. Personal-use property and inventory do not qualify.
+        </div>
+      `;
+    }
+    case 'qcd':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Qualified Charitable Distribution from IRA:</label>
+          <input type="number" id="modal-qcd" min="0" max="105000" step="100" value="${STATE.taxData.qcd||0}" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>QCD:</strong> If you are age 70½ or older, you can donate up to $105,000 directly from your IRA to a qualified charity. This amount is excluded from your taxable income. Enter $0 if not applicable.
+        </div>
+      `;
+    case 'education_expenses':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">Education-related tax benefits:</label>
+          <div style="display:grid;gap:8px">
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Student loan interest paid (max $2,500)</label>
+            <input type="number" id="modal-student-loan2" min="0" max="2500" step="50" value="${STATE.taxData.studentLoanInterest||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Qualified tuition and fees paid (for education credits)</label>
+            <input type="number" id="modal-tuition" min="0" step="100" value="${STATE.taxData.tuitionPaid||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+            <div><label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Number of students eligible for education credits</label>
+            <input type="number" id="modal-num-students" min="0" max="5" value="${STATE.taxData.numStudents||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
+          </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>AOTC:</strong> Up to $2,500/student for first 4 years (40% refundable).<br>
+          <strong>LLC:</strong> Up to $2,000 total for any higher education.<br>
+          <strong>Student loan:</strong> Above-the-line deduction, phases out at higher incomes.
+        </div>
+      `;
+    case 'crypto':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Did you receive, sell, or trade any digital assets (cryptocurrency, NFTs, etc.)?</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px">
+              <input type="radio" name="crypto-answer" value="no" ${!STATE.taxData.cryptoTransactions ? 'checked' : ''}> No
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px">
+              <input type="radio" name="crypto-answer" value="yes" ${STATE.taxData.cryptoTransactions ? 'checked' : ''}> Yes
+            </label>
+          </div>
+          <div id="crypto-fields" style="display:${STATE.taxData.cryptoTransactions ? 'block' : 'none'}">
+            <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Net crypto gain/loss (include in capital gains)</label>
+            <input type="number" id="modal-crypto-gain" step="100" value="${STATE.taxData.cryptoGain||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            <div style="margin-top:4px;font-size:11px;color:var(--text-dim)">Positive = gain, negative = loss. This is added to your Schedule D.</div>
+          </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>IRS requires disclosure.</strong> You must answer "Yes" on Form 1040 if you sold, exchanged, or received digital assets. Gains are taxed as capital gains; losses can offset gains.
+        </div>
+      `;
     default:
       return null;
   }
@@ -4280,6 +4531,13 @@ function showAssumptionModal(id, formHtml) {
   radios.forEach(r => r.addEventListener('change', () => {
     const fields = document.getElementById('itemized-fields');
     if (fields) fields.style.display = r.value === 'itemized' && r.checked ? 'block' : 'none';
+  }));
+
+  // Wire up crypto radio toggle if present
+  const cryptoRadios = overlay.querySelectorAll('input[name="crypto-answer"]');
+  cryptoRadios.forEach(r => r.addEventListener('change', () => {
+    const fields = document.getElementById('crypto-fields');
+    if (fields) fields.style.display = r.value === 'yes' && r.checked ? 'block' : 'none';
   }));
 
   // Initialize dependent detail fields if present
@@ -4407,6 +4665,68 @@ function applyAssumptionChange(id) {
       STATE.taxData.childCareCredit = parseFloat(document.getElementById('modal-childcare')?.value) || 0;
       STATE.taxData.saversCredit = parseFloat(document.getElementById('modal-savers')?.value) || 0;
       STATE.taxData.energyCredit = parseFloat(document.getElementById('modal-energy')?.value) || 0;
+      break;
+    }
+    case 'no_home_sale': {
+      const salePrice = parseFloat(document.getElementById('modal-home-sale-price')?.value) || 0;
+      const basis = parseFloat(document.getElementById('modal-home-basis')?.value) || 0;
+      if (salePrice > 0) {
+        STATE.taxData.homeSale = { salePrice, basis };
+      } else {
+        delete STATE.taxData.homeSale;
+      }
+      break;
+    }
+    case 'exchange_1031': {
+      const rFMV = parseFloat(document.getElementById('modal-1031-relinquished-fmv')?.value) || 0;
+      const rBasis = parseFloat(document.getElementById('modal-1031-relinquished-basis')?.value) || 0;
+      const repFMV = parseFloat(document.getElementById('modal-1031-replacement-fmv')?.value) || 0;
+      const bootRcvd = parseFloat(document.getElementById('modal-1031-boot-received')?.value) || 0;
+      const bootPd = parseFloat(document.getElementById('modal-1031-boot-paid')?.value) || 0;
+      const desc1031 = document.getElementById('modal-1031-desc')?.value || '';
+      if (rFMV > 0) {
+        STATE.taxData.exchange1031 = { description: desc1031, relinquishedFMV: rFMV, relinquishedBasis: rBasis, replacementFMV: repFMV, bootReceived: bootRcvd, bootPaid: bootPd };
+      } else {
+        delete STATE.taxData.exchange1031;
+      }
+      break;
+    }
+    case 'qcd': {
+      STATE.taxData.qcd = parseFloat(document.getElementById('modal-qcd')?.value) || 0;
+      break;
+    }
+    case 'education_expenses': {
+      STATE.taxData.studentLoanInterest = parseFloat(document.getElementById('modal-student-loan2')?.value) || 0;
+      STATE.taxData.tuitionPaid = parseFloat(document.getElementById('modal-tuition')?.value) || 0;
+      STATE.taxData.numStudents = parseInt(document.getElementById('modal-num-students')?.value) || 0;
+      // Auto-calculate education credit if tuition entered
+      if (STATE.taxData.tuitionPaid > 0 && STATE.taxData.numStudents > 0) {
+        // AOTC: 100% of first $2k + 25% of next $2k = max $2,500 per student
+        const perStudent = Math.min(STATE.taxData.tuitionPaid / STATE.taxData.numStudents, 4000);
+        const aotcPerStudent = Math.min(perStudent, 2000) + Math.min(Math.max(0, perStudent - 2000), 2000) * 0.25;
+        STATE.taxData.educationCredit = Math.round(aotcPerStudent * STATE.taxData.numStudents);
+      }
+      break;
+    }
+    case 'crypto': {
+      const answer = document.querySelector('input[name="crypto-answer"]:checked')?.value;
+      STATE.taxData.cryptoTransactions = answer === 'yes';
+      if (STATE.taxData.cryptoTransactions) {
+        STATE.taxData.cryptoGain = parseFloat(document.getElementById('modal-crypto-gain')?.value) || 0;
+        // Add to capital gains
+        if (STATE.taxData.cryptoGain !== 0) {
+          if (!STATE.taxData.capitalGains) STATE.taxData.capitalGains = [];
+          // Remove old crypto entry if exists
+          STATE.taxData.capitalGains = STATE.taxData.capitalGains.filter(t => t.description !== 'Digital Assets (crypto)');
+          STATE.taxData.capitalGains.push({
+            description: 'Digital Assets (crypto)',
+            dateAcquired: 'Various', dateSold: String(TAX.year),
+            proceeds: Math.max(0, STATE.taxData.cryptoGain),
+            basis: Math.max(0, -STATE.taxData.cryptoGain),
+            longTerm: true,
+          });
+        }
+      }
       break;
     }
     case 'sched_c_expenses': {
