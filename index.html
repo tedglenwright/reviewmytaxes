@@ -243,7 +243,7 @@ function renderUpload() {
 
   app.innerHTML = `
     <div class="container">
-      <div style="text-align:right;margin-bottom:-20px"><span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span></div>
+      <div style="text-align:right;margin-bottom:-20px"><span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span>${HAS_NEW_VERSION ? '<span onclick="showChangelog();markVersionSeen();render();" style="margin-left:6px;padding:2px 8px;background:var(--green);color:#fff;border-radius:10px;font-size:9px;font-weight:700;cursor:pointer">NEW</span>' : ''}</div>
       <div class="upload-hero-wrapper">
         <div class="hero-orb hero-orb-1"></div>
         <div class="hero-orb hero-orb-2"></div>
@@ -587,7 +587,7 @@ function renderReview() {
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Text</button>
         <button onclick="downloadPDF()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Export as printable PDF">PDF</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
-        <span onclick="showChangelog()" style="color:var(--text-dim);font-size:10px;font-weight:600;cursor:pointer" title="Click for changelog">${APP_VERSION}</span>
+        <span onclick="showChangelog(); markVersionSeen();" style="color:var(--text-dim);font-size:10px;font-weight:600;cursor:pointer;position:relative" title="Click for changelog">${APP_VERSION}${HAS_NEW_VERSION ? '<span style="position:absolute;top:-4px;right:-8px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>' : ''}</span>
         <span onclick="showDebugLog()" style="color:var(--text-dim);font-size:9px;cursor:pointer;margin-left:4px;opacity:0.5" title="View activity log">log</span>
       </div>
     </div>

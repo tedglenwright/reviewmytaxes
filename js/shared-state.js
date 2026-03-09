@@ -105,6 +105,11 @@ try {
 
 rlog('PAGE_LOAD', { version: APP_VERSION, credits: PAID_QUESTIONS, page: window.location.pathname });
 
+// Track version for "What's New" indicator
+const LAST_SEEN_VERSION = localStorage.getItem('rmt_last_version') || '';
+const HAS_NEW_VERSION = LAST_SEEN_VERSION !== APP_VERSION && LAST_SEEN_VERSION !== '';
+function markVersionSeen() { localStorage.setItem('rmt_last_version', APP_VERSION); }
+
 // ═══════════════════════════════════════════════════════════════
 // APPLICATION STATE
 // ═══════════════════════════════════════════════════════════════
