@@ -45,6 +45,9 @@
 <script>
 const app = document.getElementById('app');
 
+// Alias for cross-tab sync handler in shared-state.js
+function render() { if (typeof renderSchedules === 'function') renderSchedules(); }
+
 // Load state from localStorage
 loadAnswered();
 if (!loadTaxData() || !STATE.taxData) {
@@ -316,8 +319,15 @@ if (!loadTaxData() || !STATE.taxData) {
   // ─── Schedule A ───────────────────────────────────────────
   function renderScheduleA() {
     const it = STATE.taxData.itemized || {};
-    const stdDed = TAX.standardDeduction[STATE.taxData.filingStatus || 'single'];
-    const totalItemized = (it.medical||0) + Math.min((it.stateTaxes||0) + (it.propertyTaxes||0), TAX.saltCap[STATE.taxData.filingStatus||'single']) + (it.mortgageInterest||0) + (it.charitableCash||0) + (it.charitableNonCash||0);
+    const fs = STATE.taxData.filingStatus || 'single';
+    const stdDed = TAX.standardDeduction[fs];
+    // Medical: only amount exceeding 7.5% of AGI is deductible
+    const medicalFloor = (result.agi || 0) * 0.075;
+    const deductibleMedical = Math.max(0, (it.medical||0) - medicalFloor);
+    // SALT: include W-2 state withholding + state taxes + property taxes, capped
+    const w2StateWithheld = (STATE.taxData.w2s || []).reduce((sum, w) => sum + (w.stateWithheld || 0), 0);
+    const saltTotal = Math.min((it.stateTaxes||0) + w2StateWithheld + (it.propertyTaxes||0), TAX.saltCap[fs]);
+    const totalItemized = deductibleMedical + saltTotal + (it.mortgageInterest||0) + (it.charitableCash||0) + (it.charitableNonCash||0);
 
     return `
       <div class="sched-section active">
