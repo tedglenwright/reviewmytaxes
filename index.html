@@ -444,6 +444,7 @@ function renderUpload() {
           <span class="doc-pill">1099-R</span>
           <span class="doc-pill">1099-MISC</span>
           <span class="doc-pill">1099-SA</span>
+          <span class="doc-pill">1099-G</span>
           <span class="doc-pill">SSA-1099</span>
           <span class="doc-pill">1098</span>
         </div>
@@ -562,7 +563,7 @@ function renderParsing() {
       ${docsFound > 0 ? `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
         ${STATE.parsedDocs.map(d => {
-          const labels = { w2:'W-2', '1099int':'1099-INT', '1099div':'1099-DIV', '1099nec':'1099-NEC', '1099b':'1099-B', '1099misc':'1099-MISC', '1099r':'1099-R', '1098':'1098', 'ssa1099':'SSA-1099', '1099sa':'1099-SA' };
+          const labels = { w2:'W-2', '1099int':'1099-INT', '1099div':'1099-DIV', '1099nec':'1099-NEC', '1099b':'1099-B', '1099misc':'1099-MISC', '1099r':'1099-R', '1098':'1098', 'ssa1099':'SSA-1099', '1099sa':'1099-SA', '1099g':'1099-G' };
           return '<span style="padding:3px 8px;background:rgba(34,197,94,0.15);color:var(--green);border-radius:4px;font-size:11px;font-weight:600">' + (labels[d.type] || d.type) + '</span>';
         }).join('')}
       </div>
@@ -785,6 +786,7 @@ function renderReturn(r) {
         ${r.schedules['1'].priorRefund > 0 ? lineItem('   Prior-year refund', r.schedules['1'].priorRefund, {sub:true}) : ''}
         ${r.schedules['1'].gamblingIncome > 0 ? lineItem('   Gambling winnings', r.schedules['1'].gamblingIncome, {sub:true}) : ''}
         ${r.schedules['1'].alimonyReceived > 0 ? lineItem('   Alimony received', r.schedules['1'].alimonyReceived, {sub:true}) : ''}
+        ${r.schedules['1'].unemploymentIncome > 0 ? lineItem('   Unemployment compensation', r.schedules['1'].unemploymentIncome, {sub:true}) : ''}
         ${r.schedules['1'].rentalIncome > 0 ? lineItem('   Rental income', r.schedules['1'].rentalIncome, {sub:true}) : ''}
         ${r.schedules['1'].otherMiscIncome > 0 ? lineItem('   Other misc income', r.schedules['1'].otherMiscIncome, {sub:true}) : ''}
         ${lineItem('9. Total income', r.totalIncome, {bold:true})}

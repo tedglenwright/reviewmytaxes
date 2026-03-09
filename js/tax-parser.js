@@ -236,8 +236,12 @@ class TaxDocumentParser {
       return this.parseSSA1099(text);
     }
     // 1099-SA
-    if (upper.includes('1099-SA') || upper.includes('HSA') && upper.includes('DISTRIBUTION') || fname.includes('1099SA') || fname.includes('1099-SA')) {
+    if (upper.includes('1099-SA') || (upper.includes('HSA') && upper.includes('DISTRIBUTION')) || fname.includes('1099SA') || fname.includes('1099-SA')) {
       return this.parse1099SA(text);
+    }
+    // 1099-G (Government Payments — unemployment, state tax refund)
+    if (upper.includes('1099-G') || upper.includes('GOVERNMENT PAYMENTS') || upper.includes('UNEMPLOYMENT COMPENSATION') || fname.includes('1099G') || fname.includes('1099-G')) {
+      return this.parse1099G(text);
     }
     // 1098 Mortgage
     if (upper.includes('1098') || upper.includes('MORTGAGE INTEREST') || fname.includes('1098')) {
@@ -679,6 +683,26 @@ class TaxDocumentParser {
     return { type: '1099sa', grossDistribution: grossDist, earnings, distributionCode };
   }
 
+  parse1099G(text) {
+    this.onLog('Detected: Form 1099-G (Government Payments)');
+    // Box 1: Unemployment compensation
+    const unemployment = this.findMoney(text, [
+      /(?:box\s*1|unemployment\s*compensation)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    // Box 2: State or local income tax refund
+    const stateRefund = this.findMoney(text, [
+      /(?:box\s*2|state.*refund|state.*tax\s*refund)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    // Box 4: Federal income tax withheld
+    const fedWithheld = this.findMoney(text, [
+      /(?:box\s*4|federal.*(?:tax|income).*(?:withheld|withholding))\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+      /(?:federal.*withh?(?:eld|olding))\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const payer = text.match(/(?:payer|agency|department|state\s+of)\s*[:.]?\s*(.{5,50})/i)?.[1]?.trim() || 'Government Agency';
+    this.onLog(`  Unemployment: $${unemployment.toLocaleString()}, State refund: $${stateRefund.toLocaleString()}, Fed withheld: $${fedWithheld.toLocaleString()}`);
+    return { type: '1099g', unemployment, stateRefund, fedWithheld, payer };
+  }
+
   parseBestEffort(text) {
     const amounts = this.findAllMoney(text);
     if (amounts.length === 0) return null;
@@ -735,6 +759,15 @@ function aggregateParsedDocs(docs) {
       case '1099sa':
         data.hsaDistributions = (data.hsaDistributions || 0) + (doc.grossDistribution || 0);
         data.hsaDistributionCode = doc.distributionCode;
+        break;
+      case '1099g':
+        data.unemploymentIncome = (data.unemploymentIncome || 0) + (doc.unemployment || 0);
+        data.stateRefund1099G = (data.stateRefund1099G || 0) + (doc.stateRefund || 0);
+        if (doc.fedWithheld) {
+          // Add to estimated payments as withholding
+          data.estimatedPayments = (data.estimatedPayments || 0) + doc.fedWithheld;
+        }
+        if (doc._sourceURL) data._govSources = (data._govSources || []).concat({ _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName, unemployment: doc.unemployment, payer: doc.payer });
         break;
     }
   }

@@ -365,7 +365,8 @@ function computeTaxReturn(data) {
   const alimonyReceived = data.alimonyReceived || 0;
   const rentalIncome = data.rentalIncome || 0;
   const otherMiscIncome = data.otherMiscIncome || 0;
-  const otherIncome = priorRefund + gamblingIncome + alimonyReceived + rentalIncome + otherMiscIncome;
+  const unemploymentIncome = data.unemploymentIncome || 0;
+  const otherIncome = priorRefund + gamblingIncome + alimonyReceived + rentalIncome + otherMiscIncome + unemploymentIncome;
 
   // Schedule E — Rental Income
   let schedENet = 0;
@@ -416,7 +417,11 @@ function computeTaxReturn(data) {
 
   // Adjustments
   const adjustments = seDeduction + hsaDed + iraDed + studentLoanDed + educatorDed + alimonyPaid + movingExpenses;
-  schedules['1'] = { seDeduction, hsaDed, iraDed, studentLoanDed, educatorDed, alimonyPaid, movingExpenses, otherIncome, priorRefund, gamblingIncome, alimonyReceived, rentalIncome, otherMiscIncome, totalAdjustments: adjustments };
+  schedules['1'] = { seDeduction, hsaDed, iraDed, studentLoanDed, educatorDed, alimonyPaid, movingExpenses, otherIncome, priorRefund, gamblingIncome, alimonyReceived, rentalIncome, otherMiscIncome, unemploymentIncome, totalAdjustments: adjustments };
+
+  if (unemploymentIncome > 0) {
+    assumptions.push({ id:'unemployment', text:`Unemployment compensation of $${unemploymentIncome.toLocaleString()} included in income (fully taxable for tax year ${TAX.year})`, impact:'medium' });
+  }
 
   // AGI
   const agi = totalIncome - adjustments;
