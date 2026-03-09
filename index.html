@@ -1842,6 +1842,7 @@ function runScenario(scenarioId) {
   if (!STATE.answeredQs.has(compareKey)) {
     if (PAID_QUESTIONS <= 0) {
       if (STRIPE_PAYMENT_LINKS.per_question) {
+        localStorage.setItem('rmt_pending_question', compareKey);
         window.location.href = STRIPE_PAYMENT_LINKS.per_question;
         return;
       }
@@ -1942,8 +1943,9 @@ function answerQuestion(id) {
 
   // Check if this is a paid question — $5 per question
   if (formHtml && !STATE.answeredQs.has(id) && PAID_QUESTIONS <= 0) {
-    // Need payment — redirect to Stripe
+    // Need payment — save which question they want, then redirect to Stripe
     if (STRIPE_PAYMENT_LINKS.per_question) {
+      localStorage.setItem('rmt_pending_question', id);
       window.location.href = STRIPE_PAYMENT_LINKS.per_question;
       return;
     }
@@ -3058,6 +3060,17 @@ if (loadTaxData() && STATE.taxData) {
 
 // Initial render
 render();
+
+// If returning from Stripe payment, auto-open the question they paid for
+if (PENDING_QUESTION_ID && STATE.screen === 'review' && PAID_QUESTIONS > 0) {
+  const pendingId = PENDING_QUESTION_ID;
+  localStorage.removeItem('rmt_pending_question');
+  PENDING_QUESTION_ID = null;
+  // Switch to assumptions tab and open the question
+  STATE.tab = 'assumptions';
+  render();
+  setTimeout(() => answerQuestion(pendingId), 300);
+}
 </script>
 </body>
 </html>

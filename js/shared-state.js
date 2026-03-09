@@ -26,12 +26,22 @@ try {
 
 // Check for payment return from Stripe (with localStorage persistence)
 let PAID_QUESTIONS = 0;
+let PENDING_QUESTION_ID = null; // Question user was trying to answer before payment
 try {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('paid')) {
-    const paidCount = parseInt(urlParams.get('paid')) || 0;
-    localStorage.setItem('rmt_payment', JSON.stringify({ paidQuestions: 1, usedQuestions: 0, timestamp: Date.now() }));
-    PAID_QUESTIONS = 1;
+    // Add credit to existing balance (don't overwrite)
+    const existing = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
+    const currentPaid = (existing.paidQuestions || 0);
+    const currentUsed = (existing.usedQuestions || 0);
+    localStorage.setItem('rmt_payment', JSON.stringify({
+      paidQuestions: currentPaid + 1,
+      usedQuestions: currentUsed,
+      timestamp: Date.now()
+    }));
+    PAID_QUESTIONS = (currentPaid + 1) - currentUsed;
+    // Restore the question they were trying to answer
+    PENDING_QUESTION_ID = localStorage.getItem('rmt_pending_question') || null;
     window.history.replaceState({}, '', window.location.pathname);
   } else {
     const stored = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
