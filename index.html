@@ -390,15 +390,30 @@
 
   /* Responsive */
   @media (max-width: 768px) {
-    .summary-grid { grid-template-columns: repeat(2,1fr); }
-    .demo-grid { grid-template-columns: repeat(2,1fr); }
+    .container { padding: 16px; }
+    .summary-grid { grid-template-columns: repeat(2,1fr); gap: 8px; }
+    .summary-card .val { font-size: 18px; }
+    .demo-grid { grid-template-columns: repeat(2,1fr); gap: 8px; }
     .pricing-grid { grid-template-columns: 1fr; }
     .security-grid { grid-template-columns: 1fr; }
     .how-steps { grid-template-columns: repeat(2,1fr); }
     .form8949-table { font-size: 10px; }
+    .form8949-table th, .form8949-table td { padding: 4px 4px; }
     .top-bar { flex-direction: column; gap: 8px; padding: 8px 16px; }
     .top-bar-left { flex-wrap: wrap; gap: 8px; }
     .source-modal { width: 95vw; height: 90vh; }
+    .tabs { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab-btn { padding: 10px 14px; font-size: 13px; white-space: nowrap; }
+    .upload-hero h1 { font-size: 22px; }
+    .drop-zone { padding: 24px; }
+    .refund-box .amount { font-size: 28px; }
+    .line-item { font-size: 13px; }
+    .section-header .title { font-size: 14px; }
+  }
+  @media (max-width: 480px) {
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+    .demo-grid { grid-template-columns: 1fr; }
+    .how-steps { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -1919,7 +1934,7 @@ function renderReview() {
         <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
-        <span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span>
+        <span onclick="showChangelog()" style="color:var(--text-dim);font-size:10px;font-weight:600;cursor:pointer" title="Click for changelog">${APP_VERSION}</span>
       </div>
     </div>
     <div class="tabs">
@@ -2726,7 +2741,12 @@ async function startParsing() {
       STATE.tab = 'return';
       STATE.answeredQs = new Set();
     } else {
-      STATE.ocrLogs.push({ text: 'No tax data could be extracted. Try the demo scenarios instead.', type: 'warn' });
+      STATE.ocrLogs.push({ text: 'No tax data could be extracted from your files.', type: 'warn' });
+      STATE.ocrLogs.push({ text: 'Tips: Make sure your PDFs are W-2s, 1099s, or 1098s.', type: 'warn' });
+      STATE.ocrLogs.push({ text: 'Scanned/image PDFs may take longer. Try a clear, high-resolution scan.', type: '' });
+      STATE.ocrLogs.push({ text: 'You can also try a demo scenario below to see how the app works.', type: '' });
+      render();
+      showToast('No tax documents detected. Try demo scenarios or different files.', 'error');
     }
     render();
   }, 1500);
@@ -3068,12 +3088,17 @@ function applyAssumptionChange(id) {
   STATE.tab = 'return';
   render();
 
-  // Show impact toast
+  // Show impact toast and scroll to result
   const newRefund = STATE.result.refundOrOwed;
   const diff = newRefund - oldRefund;
   if (diff !== 0) {
     showImpactToast(diff);
   }
+  // Scroll to the refund/owed box after a brief delay for rendering
+  setTimeout(() => {
+    const refundBox = document.querySelector('.refund-box');
+    if (refundBox) refundBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 300);
 }
 
 function sumEstPayments() {
@@ -3087,20 +3112,9 @@ function sumEstPayments() {
 }
 
 function showToast(message, type) {
-  // Remove existing toasts
   document.querySelectorAll('.app-toast').forEach(t => t.remove());
   const toast = document.createElement('div');
-  toast.className = 'app-toast';
-  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:700;animation:slideUp 0.3s ease;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
-  const styles = {
-    success: { bg: 'rgba(34,197,94,0.15)', border: 'var(--green)', color: 'var(--green)' },
-    error: { bg: 'rgba(239,68,68,0.15)', border: 'var(--red)', color: 'var(--red)' },
-    info: { bg: 'rgba(59,130,246,0.15)', border: 'var(--accent)', color: 'var(--accent-light)' },
-  };
-  const s = styles[type] || styles.info;
-  toast.style.background = s.bg;
-  toast.style.border = '1px solid ' + s.border;
-  toast.style.color = s.color;
+  toast.className = `app-toast ${type || 'info'}`;
   toast.textContent = message;
   document.body.appendChild(toast);
   setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.5s'; setTimeout(() => toast.remove(), 500); }, 3000);
@@ -3251,9 +3265,73 @@ function showAuditResults(results) {
   }
 }
 
+function showChangelog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'source-modal-overlay';
+  overlay.id = 'changelog-modal';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="source-modal" style="height:auto;max-height:85vh;max-width:520px">
+      <div class="source-modal-header">
+        <div>
+          <div class="title">Changelog</div>
+          <div class="filename">ReviewMyTaxes Version History</div>
+        </div>
+        <button class="close-btn" onclick="document.getElementById('changelog-modal').remove()">Close</button>
+      </div>
+      <div class="source-modal-body" style="padding:20px;overflow-y:auto;font-size:13px;line-height:1.6">
+        <div style="margin-bottom:16px">
+          <div style="color:var(--accent-light);font-weight:700;font-size:15px">v0.5.0-beta</div>
+          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">March 2026</div>
+          <ul style="color:var(--text-muted);padding-left:20px;margin:0">
+            <li>Download text summary of your draft return</li>
+            <li>Animated tab transitions</li>
+            <li>Refinement progress bar on Assumptions tab</li>
+            <li>Keyboard shortcut: Escape closes modals</li>
+            <li>Improved mobile responsive design</li>
+            <li>Better error messages when no documents found</li>
+            <li>XSS sanitization for all OCR-derived content</li>
+          </ul>
+        </div>
+        <div style="margin-bottom:16px">
+          <div style="color:var(--accent-light);font-weight:700;font-size:15px">v0.4.0-beta</div>
+          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">March 2026</div>
+          <ul style="color:var(--text-muted);padding-left:20px;margin:0">
+            <li>Source document viewer for all document types</li>
+            <li>Interactive assumption forms (filing status, dependents, credits, deductions)</li>
+            <li>Tax bracket visualization</li>
+            <li>Personalized tax savings tips</li>
+            <li>Before/after comparison when refining</li>
+            <li>Documents tab to view all uploads</li>
+            <li>Share summary to clipboard</li>
+            <li>Print-friendly styles</li>
+            <li>4 demo scenarios</li>
+            <li>Above-the-line deductions (HSA, IRA, student loan)</li>
+            <li>Child Tax Credit, Other Dependent, Education, EITC</li>
+          </ul>
+        </div>
+        <div>
+          <div style="color:var(--accent-light);font-weight:700;font-size:15px">v0.3.0 and earlier</div>
+          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">February-March 2026</div>
+          <ul style="color:var(--text-muted);padding-left:20px;margin:0">
+            <li>Initial release: W-2 parsing and basic Form 1040</li>
+            <li>Added 1099-INT, 1099-DIV, 1099-NEC, 1099-B, 1098 support</li>
+            <li>Schedule C, D, SE calculations</li>
+            <li>Network monitoring and privacy features</li>
+            <li>W-2 positional parsing improvements</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    const changelog = document.getElementById('changelog-modal');
+    if (changelog) { changelog.remove(); return; }
     const assumptionModal = document.getElementById('assumption-modal');
     if (assumptionModal) { closeAssumptionModal(); return; }
     closeSourceDoc();
