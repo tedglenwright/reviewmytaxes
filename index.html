@@ -1712,7 +1712,7 @@ async function startParsing() {
   setTimeout(() => {
     if (STATE.parsedDocs.length > 0) {
       STATE.taxData = aggregateParsedDocs(STATE.parsedDocs);
-      STATE.result = computeTaxReturn(STATE.taxData); saveTaxData();
+      STATE.result = safeCompute(STATE.taxData);
       STATE.originalResult = { ...STATE.result };
       STATE.screen = 'review';
       STATE.tab = 'return';
@@ -1740,10 +1740,38 @@ async function startParsing() {
   }, 1500);
 }
 
+function safeCompute(data) {
+  try {
+    const result = computeTaxReturn(data);
+    saveTaxData();
+    return result;
+  } catch (err) {
+    rlog('COMPUTE_ERROR', err.message);
+    console.error('Tax computation error:', err);
+    showToast('Calculation error — some values may be incorrect', 'error');
+    // Return a minimal result so the app doesn't crash
+    return {
+      filingStatus: data.filingStatus || 'single',
+      w2s: data.w2s || [], interest: data.interest || [], dividends: data.dividends || [],
+      retirementDist: [], totalWages: 0, totalInterest: 0, totalOrdDiv: 0, totalQualDiv: 0,
+      totalRetirement: 0, ssaBenefits: 0, ssaTaxable: 0, schedCNet: 0, schedENet: 0,
+      netSTCG: 0, netLTCG: 0, homeSaleGain: 0, homeSaleExclusion: 0, homeSaleTaxable: 0,
+      otherIncome: 0, totalIncome: 0, adjustments: 0, agi: 0, deduction: 0, usingItemized: false,
+      qbiDeduction: 0, taxableIncome: 0, ordinaryTax: 0, ltcgTax: 0, incomeTax: 0,
+      seTax: 0, niit: 0, amt: 0, totalTax: 0, totalFedWithheld: 0, totalStateWithheld: 0,
+      estimatedPayments: 0, totalPayments: 0, refundOrOwed: 0, effectiveRate: 0, marginalRate: 0,
+      underpaymentPenalty: 0, ptcReconciliation: 0,
+      assumptions: [], schedules: { '1':{}, '3':{totalCredits:0,totalNonrefundableCredits:0,eitcCredit:0}, SE:{} },
+      _necSources: [], _mortgageSources: [],
+      _error: err.message,
+    };
+  }
+}
+
 function loadDemo(key) {
   rlog('LOAD_DEMO', key);
   STATE.taxData = JSON.parse(JSON.stringify(DEMOS[key].data));
-  STATE.result = computeTaxReturn(STATE.taxData); saveTaxData();
+  STATE.result = safeCompute(STATE.taxData);
   STATE.originalResult = { ...STATE.result };
   STATE.screen = 'review';
   STATE.tab = 'return';
@@ -1835,7 +1863,7 @@ async function handleAdditionalUpload(event) {
   }
 
   // Recalculate
-  STATE.result = computeTaxReturn(STATE.taxData); saveTaxData();
+  STATE.result = safeCompute(STATE.taxData);
   showToast(`Added ${newDocs.length} document${newDocs.length > 1 ? 's' : ''} — return recalculated`, 'success');
   STATE.tab = 'return';
   render();
@@ -2897,7 +2925,7 @@ function applyAssumptionChange(id) {
   }
 
   // Recalculate
-  STATE.result = computeTaxReturn(STATE.taxData); saveTaxData();
+  STATE.result = safeCompute(STATE.taxData);
   STATE.answeredQs.add(id);
   saveAnswered();
   closeAssumptionModal();
@@ -3375,7 +3403,7 @@ document.addEventListener('keydown', (e) => {
 // Restore state from localStorage if returning from another page
 loadAnswered();
 if (loadTaxData() && STATE.taxData) {
-  STATE.result = computeTaxReturn(STATE.taxData);
+  STATE.result = safeCompute(STATE.taxData);
   const savedScreen = localStorage.getItem('rmt_screen') || 'upload';
   // Only restore 'review' — never restore 'parsing' or other transient states
   STATE.screen = (savedScreen === 'review') ? 'review' : 'upload';
