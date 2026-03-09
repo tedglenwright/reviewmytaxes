@@ -15,7 +15,7 @@ const GITHUB_LICENSE = GITHUB_REPO + '/blob/main/LICENSE';
 // ═══════════════════════════════════════════════════════════════
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_51T8wONRsVTiXg9w7lAViMeXUo3BjYuVQ5CPjfHIFjPOCd0tVRqSehgbfpTT3xJwagQnuOgBNzE7r0e9HUr7f51pY00cUcmUkO6';
 const STRIPE_PAYMENT_LINKS = {
-  per_question: 'https://buy.stripe.com/6oU3cxfEC10pfokgNV1Nu00',
+  per_question: 'https://buy.stripe.com/8x25kFgIG38x1xubtB1Nu01',
 };
 let stripeInstance = null;
 try {
