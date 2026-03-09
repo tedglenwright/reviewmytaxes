@@ -73,7 +73,7 @@
   .btn-primary:hover { background: #2563eb; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .demo-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 16px; }
+  .demo-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 16px; }
   .demo-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; padding: 16px; text-align: left;
@@ -367,7 +367,7 @@
   /* Responsive */
   @media (max-width: 768px) {
     .summary-grid { grid-template-columns: repeat(2,1fr); }
-    .demo-grid { grid-template-columns: 1fr; }
+    .demo-grid { grid-template-columns: repeat(2,1fr); }
     .pricing-grid { grid-template-columns: 1fr; }
     .security-grid { grid-template-columns: 1fr; }
     .how-steps { grid-template-columns: repeat(2,1fr); }
@@ -1373,6 +1373,19 @@ const DEMOS = {
       ],
       itemized: { medical:8500, stateTaxes:5200, propertyTaxes:14800, mortgageInterest:22000, charitableCash:8500, charitableNonCash:2000 },
     }
+  },
+  hoh_parent: {
+    label: 'Single Parent (HOH)',
+    desc: 'Head of Household, W-2 + child tax credits',
+    data: {
+      filingStatus: 'hoh',
+      w2s: [{ employer:'County Schools', wages:58000, fedWithheld:5200, stateWithheld:2100 }],
+      interest: [{ payer:'Credit Union', amount:120 }],
+      dividends: [],
+      numChildren: 2,
+      numOtherDeps: 0,
+      dependents: 2,
+    }
   }
 };
 
@@ -1724,11 +1737,20 @@ function renderUpload() {
       </div>
 
       <div class="drop-zone" id="dropzone">
-        <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" style="display:none">
+        <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.gif,.webp" style="display:none">
         <div class="icon">&#x1f4c4;</div>
         <div class="title">Drop your tax documents here</div>
-        <div class="subtitle">W-2, 1099-INT, 1099-DIV, 1099-NEC, 1099-B, 1099-MISC, 1098</div>
-        <div class="hint">PDF, JPG, PNG, TIFF — parsed with PDF.js + Tesseract.js OCR (100% in your browser)</div>
+        <div class="subtitle" style="margin-top:4px">or click to browse files</div>
+        <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:12px">
+          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">W-2</span>
+          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-INT</span>
+          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-DIV</span>
+          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-NEC</span>
+          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-B</span>
+          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-MISC</span>
+          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1098</span>
+        </div>
+        <div class="hint" style="margin-top:8px">PDF, JPG, PNG, TIFF — auto-detected and parsed in your browser</div>
       </div>
 
       ${STATE.files.length > 0 ? `
