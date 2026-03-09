@@ -508,34 +508,43 @@ class TaxDocumentParser {
     const norm = text.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ');
 
     const wages = this.findMoney(norm, [
-      // "1 Wages, tips..." followed by a dollar amount (with possible line breaks)
       /(?:box\s*1\b)[^A-Za-z\d$]*(?:wages[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /wages[,.\s]*tips[,.\s]*other\s*comp\w*[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /wages[:\s$]+(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
-      // Fallback: "1" as a standalone box label near a dollar amount
+      /wages\W{1,80}?(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /\b1\s+[\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})\b/i,
     ]);
     const fedWithheld = this.findMoney(norm, [
       /(?:box\s*2\b)[^A-Za-z\d$]*(?:federal[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /federal\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /(?:fed(?:eral)?)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /f.{0,6}(?:l|t)\s*(?:income|tax|lax).{0,40}?(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /\b2\s+[\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})\b/i,
     ]);
     const stateWithheld = this.findMoney(norm, [
       /(?:box\s*17\b)[^A-Za-z\d$]*(?:state[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /state\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /(?:state)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /state\s*(?:income\s*)?(?:tax|lax).{0,40}?(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /\b17\s+[\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})\b/i,
     ]);
     const employer = this.findEmployer(norm);
 
-    // If labeled regex failed, try to find the largest dollar amounts as fallback
+    // Smart fallback using W-2 structure knowledge
     if (wages === 0) {
       const all = this.findAllMoney(norm);
-      all.sort((a,b) => b - a);
       if (all.length >= 1) {
-        this.onLog('⚠ Could not find labeled wage amount — using largest amount found');
-        return { type: 'w2', employer, wages: all[0], fedWithheld: all[1] || 0, stateWithheld: all[2] || 0 };
+        const freq = {};
+        all.forEach(v => { const k = v.toFixed(2); freq[k] = (freq[k] || 0) + 1; });
+        const descByValue = [...new Set(all.map(v => v.toFixed(2)))].map(Number).sort((a, b) => b - a);
+        this.onLog('⚠ Could not find labeled amounts — using W-2 heuristic fallback');
+        // Box 5 (Medicare wages) >= Box 1 (wages), so second-largest is likely wages
+        const w = descByValue.length >= 2 && descByValue[0] > descByValue[1] ? descByValue[1] : descByValue[0];
+        const fCandidates = descByValue.filter(v => v < w && v > w * 0.05);
+        const f = fCandidates[0] || 0;
+        const sCandidates = descByValue.filter(v => v < (f || w) && v > 100 && v !== f);
+        const s = sCandidates[0] || 0;
+        return { type: 'w2', employer, wages: w, fedWithheld: f, stateWithheld: s };
       }
     }
 

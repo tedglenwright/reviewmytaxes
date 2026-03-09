@@ -644,12 +644,44 @@ class TaxDocumentParser {
       return { type: 'w2', employer, ...regexResult };
     }
 
-    // Strategy 4: Fallback — find largest dollar amounts
+    // Strategy 4: Smart fallback using W-2 structure knowledge
+    // On a W-2, Box 5 (Medicare wages) >= Box 1 (Wages) >= Box 2 (Fed withheld).
+    // Box 1 is wages AFTER pre-tax deductions (401k, health insurance).
+    // Box 5 is wages BEFORE those deductions. So Box 1 <= Box 5.
+    // Fed withheld is typically 10-40% of wages.
+    // We look for the most-repeated amounts (since W-2 PDFs often have multiple copies).
     const all = this.findAllMoney(norm);
-    all.sort((a, b) => b - a);
     if (all.length >= 1) {
-      this.onLog(`  [Strategy: fallback] Using largest amounts found: ${all.slice(0, 5).join(', ')}`);
-      return { type: 'w2', employer, wages: all[0], fedWithheld: all[1] || 0, stateWithheld: all[2] || 0 };
+      // Count frequency of each amount (multiple W-2 copies = repeated values)
+      const freq = {};
+      all.forEach(v => { const k = v.toFixed(2); freq[k] = (freq[k] || 0) + 1; });
+      // Get unique amounts sorted by frequency (most repeated first), then by value
+      const unique = [...new Set(all.map(v => v.toFixed(2)))].map(Number);
+      unique.sort((a, b) => (freq[b.toFixed(2)] || 0) - (freq[a.toFixed(2)] || 0) || b - a);
+      this.onLog(`  [Strategy: fallback] Top amounts by frequency: ${unique.slice(0, 8).map(v => `$${v.toLocaleString()}(x${freq[v.toFixed(2)]})`).join(', ')}`);
+
+      // Find likely wages: the second-largest unique amount (largest is usually Medicare wages Box 5)
+      const descByValue = [...unique].sort((a, b) => b - a);
+      let wages = 0, fedWithheld = 0, stateWithheld = 0;
+
+      if (descByValue.length >= 2 && descByValue[0] > descByValue[1]) {
+        // Largest is likely Medicare wages (Box 5), second largest is likely wages (Box 1)
+        wages = descByValue[1];
+        // Fed withheld should be < wages and typically 10-40% of wages
+        const candidates = descByValue.filter(v => v < wages && v > wages * 0.05);
+        if (candidates.length >= 1) fedWithheld = candidates[0]; // largest that's less than wages
+        // State withheld is usually smaller than fed withheld
+        const stateCandidates = descByValue.filter(v => v < (fedWithheld || wages) && v > 100 && v !== fedWithheld);
+        if (stateCandidates.length >= 1) stateWithheld = stateCandidates[0];
+      } else {
+        // Can't distinguish — use largest
+        wages = descByValue[0] || 0;
+        fedWithheld = descByValue[1] || 0;
+        stateWithheld = descByValue[2] || 0;
+      }
+
+      this.onLog(`  [Strategy: fallback] Wages: $${wages.toLocaleString()}, Fed withheld: $${fedWithheld.toLocaleString()}, State withheld: $${stateWithheld.toLocaleString()}`);
+      return { type: 'w2', employer, wages, fedWithheld, stateWithheld };
     }
 
     this.onLog('⚠ Could not extract any W-2 amounts');
@@ -694,19 +726,30 @@ class TaxDocumentParser {
     let wages = 0, fedWithheld = 0, stateWithheld = 0;
     const moneyRe = /(?<!\d)\$?\s?(\d{1,3}(?:,?\d{3})*\.\d{2})\b/;
 
+    // Multiple patterns per field, from strict to lenient (handles OCR garbling)
     const boxPatterns = [
+      // Wages (Box 1) — OCR may garble "tips" and "compensation"
       { field: 'wages', re: /(?:box\s*1\b|(?:^|\s)1\s+wages|wages[,.\s]*tips[,.\s]*other\s*comp)/i },
+      { field: 'wages', re: /wages\s*[,.]?\s*(?:tips|t.ps|l.ps)/i },
+      { field: 'wages', re: /\b1\s+w.{0,4}g.{0,4}s?\b/i },
+      // Fed withheld (Box 2) — OCR may garble "federal" and "withheld"
       { field: 'fedWithheld', re: /(?:box\s*2\b|(?:^|\s)2\s+federal|federal\s*(?:income\s*)?tax\s*withheld)/i },
+      { field: 'fedWithheld', re: /fed\w*\s*income\s*(?:tax|lax)/i },
+      { field: 'fedWithheld', re: /\b2\s+f.{0,6}(?:l|t)\s*(?:inc|tax|lax|w.t)/i },
+      // State withheld (Box 17)
       { field: 'stateWithheld', re: /(?:box\s*17\b|(?:^|\s)17\s+state|state\s*(?:income\s*)?tax\s*withheld)/i },
+      { field: 'stateWithheld', re: /state\s*income\s*(?:tax|lax)/i },
+      { field: 'stateWithheld', re: /\b17\s+st.{0,4}\s*(?:inc|tax|lax|w.t)/i },
     ];
 
     for (let i = 0; i < lines.length; i++) {
       for (const bp of boxPatterns) {
         if (!bp.re.test(lines[i])) continue;
-        // Look for money on this line, then next 2 lines (value may be below label)
+        // Look for money on this line, then next 3 lines (value may be below label)
         let m = lines[i].match(moneyRe);
         if (!m && lines[i + 1]) m = lines[i + 1].match(moneyRe);
         if (!m && lines[i + 2]) m = lines[i + 2].match(moneyRe);
+        if (!m && lines[i + 3]) m = lines[i + 3].match(moneyRe);
         if (m) {
           const val = parseFloat(m[1].replace(/,/g, ''));
           if (val > 0) {
@@ -726,16 +769,22 @@ class TaxDocumentParser {
       /(?:box\s*1\b)[^A-Za-z\d$]*(?:wages[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /wages[,.\s]*tips[,.\s]*other\s*comp\w*[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /wages[:\s$]+(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      // OCR-lenient: "Wages," or "Wages " followed within 80 chars by a dollar amount
+      /wages\W{1,80}?(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
     ]);
     const fedWithheld = this.findMoney(text, [
       /(?:box\s*2\b)[^A-Za-z\d$]*(?:federal[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /federal\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /(?:fed(?:eral)?)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      // OCR-lenient: "Federal" or "Ftdenll" near "income" or "tax"
+      /f.{0,6}(?:l|t)\s*(?:income|tax|lax).{0,40}?(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
     ]);
     const stateWithheld = this.findMoney(text, [
       /(?:box\s*17\b)[^A-Za-z\d$]*(?:state[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /state\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
       /(?:state)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      // OCR-lenient
+      /state\s*(?:income\s*)?(?:tax|lax).{0,40}?(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
     ]);
     return { wages, fedWithheld, stateWithheld };
   }
