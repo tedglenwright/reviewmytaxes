@@ -584,6 +584,7 @@ function renderReview() {
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
         <span onclick="showChangelog()" style="color:var(--text-dim);font-size:10px;font-weight:600;cursor:pointer" title="Click for changelog">${APP_VERSION}</span>
+        <span onclick="showDebugLog()" style="color:var(--text-dim);font-size:9px;cursor:pointer;margin-left:4px;opacity:0.5" title="View activity log">log</span>
       </div>
     </div>
     <div class="tabs">
@@ -1558,6 +1559,7 @@ function removeFile(i) {
 }
 
 async function startParsing() {
+  rlog('START_PARSING', { fileCount: STATE.files.length, fileNames: STATE.files.map(f => f.name).join(', ') });
   STATE.screen = 'parsing';
   STATE.ocrLogs = [];
   STATE.ocrProgress = 0;
@@ -1627,6 +1629,7 @@ async function startParsing() {
 }
 
 function loadDemo(key) {
+  rlog('LOAD_DEMO', key);
   STATE.taxData = JSON.parse(JSON.stringify(DEMOS[key].data));
   STATE.result = computeTaxReturn(STATE.taxData); saveTaxData();
   STATE.originalResult = { ...STATE.result };
@@ -1789,6 +1792,7 @@ function goBack() {
 }
 
 function setTab(t) {
+  rlog('TAB_CHANGE', t);
   STATE.tab = t;
   render();
 }
@@ -1939,22 +1943,26 @@ function runScenario(scenarioId) {
 }
 
 function answerQuestion(id) {
+  rlog('ANSWER_CLICK', { id, credits: PAID_QUESTIONS, alreadyAnswered: STATE.answeredQs.has(id) });
   const formHtml = getAssumptionForm(id);
 
   // Check if this is a paid question — $5 per question
   if (formHtml && !STATE.answeredQs.has(id) && PAID_QUESTIONS <= 0) {
     // Need payment — save which question they want, then redirect to Stripe
     if (STRIPE_PAYMENT_LINKS.per_question) {
+      rlog('REDIRECT_TO_STRIPE', { questionId: id, link: STRIPE_PAYMENT_LINKS.per_question });
       localStorage.setItem('rmt_pending_question', id);
       window.location.href = STRIPE_PAYMENT_LINKS.per_question;
       return;
     }
+    rlog('NO_PAYMENT_LINK', 'allowing free access (beta mode)');
     // If no payment link configured, allow free access (beta mode)
   }
 
   // Deduct from paid questions if applicable
   if (formHtml && PAID_QUESTIONS > 0 && !STATE.answeredQs.has(id)) {
     PAID_QUESTIONS--;
+    rlog('CREDIT_USED', { questionId: id, remainingCredits: PAID_QUESTIONS });
     try {
       const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
       payment.usedQuestions = (payment.usedQuestions || 0) + 1;
@@ -1963,6 +1971,7 @@ function answerQuestion(id) {
   }
 
   if (formHtml) {
+    rlog('SHOW_FORM', id);
     showAssumptionModal(id, formHtml);
   } else {
     STATE.answeredQs.add(id);
@@ -2498,6 +2507,7 @@ function closeAssumptionModal() {
 }
 
 function applyAssumptionChange(id) {
+  rlog('APPLY_CHANGE', { id, screen: STATE.screen, tab: STATE.tab });
   const oldRefund = STATE.result.refundOrOwed;
 
   switch(id) {
@@ -3047,6 +3057,11 @@ document.addEventListener('keydown', (e) => {
     const assumptionModal = document.getElementById('assumption-modal');
     if (assumptionModal) { closeAssumptionModal(); return; }
     closeSourceDoc();
+  }
+  // Ctrl+Shift+L = show debug log
+  if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+    e.preventDefault();
+    showDebugLog();
   }
 });
 
