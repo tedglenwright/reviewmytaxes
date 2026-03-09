@@ -584,7 +584,8 @@ function renderReview() {
         ${answeredCount > 0 ? `<div class="cost-badge">${answeredCount} refined · $${answeredCount*5}</div>` : ''}
         <button onclick="emailSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Email tax summary">Email</button>
         <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
-        <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
+        <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Text</button>
+        <button onclick="downloadPDF()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Export as printable PDF">PDF</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
         <span onclick="showChangelog()" style="color:var(--text-dim);font-size:10px;font-weight:600;cursor:pointer" title="Click for changelog">${APP_VERSION}</span>
         <span onclick="showDebugLog()" style="color:var(--text-dim);font-size:9px;cursor:pointer;margin-left:4px;opacity:0.5" title="View activity log">log</span>
@@ -3019,6 +3020,93 @@ function downloadSummary() {
   a.click();
   URL.revokeObjectURL(url);
   showToast('Summary downloaded', 'success');
+}
+
+function downloadPDF() {
+  const r = STATE.result;
+  if (!r) return;
+  const row = (label, value, bold) => `<tr${bold ? ' style="font-weight:700;border-top:2px solid #333"' : ''}><td style="padding:4px 8px">${label}</td><td style="text-align:right;padding:4px 8px">${value}</td></tr>`;
+  const section = (title) => `<tr><td colspan="2" style="padding:12px 8px 4px;font-size:14px;font-weight:700;color:#1e40af;border-bottom:1px solid #ccc">${title}</td></tr>`;
+
+  let rows = '';
+  rows += section('Income (Lines 1–9)');
+  r.w2s.forEach((w, i) => { rows += row('W-2: ' + (w.employer || 'Employer ' + (i+1)), '$' + fmt(w.wages)); });
+  if (r.totalInterest > 0) rows += row('2b. Taxable interest', '$' + fmt(r.totalInterest));
+  if (r.totalOrdDiv > 0) rows += row('3a. Ordinary dividends', '$' + fmt(r.totalOrdDiv));
+  if (r.totalRetirement > 0) rows += row('4b. Taxable retirement income', '$' + fmt(r.totalRetirement));
+  if (r.ssaTaxable > 0) rows += row('5b. Taxable Social Security', '$' + fmt(r.ssaTaxable));
+  if (r.schedCNet !== 0) rows += row('8. Business income (Schedule C)', '$' + fmt(r.schedCNet));
+  if ((r.netSTCG + r.netLTCG) !== 0) rows += row('7. Capital gains (Schedule D)', '$' + fmt(r.netSTCG + r.netLTCG));
+  if (r.schedENet !== 0) rows += row('Schedule E rental income', '$' + fmt(r.schedENet));
+  rows += row('9. Total income', '$' + fmt(r.totalIncome), true);
+
+  rows += section('Adjustments & Deductions');
+  if (r.adjustments > 0) rows += row('10. Adjustments', '$' + fmt(r.adjustments));
+  rows += row('11. AGI', '$' + fmt(r.agi), true);
+  rows += row('12. ' + (r.usingItemized ? 'Itemized' : 'Standard') + ' deduction', '$' + fmt(r.deduction));
+  if (r.qbiDeduction > 0) rows += row('13. QBI deduction', '$' + fmt(r.qbiDeduction));
+  rows += row('15. Taxable income', '$' + fmt(r.taxableIncome), true);
+
+  rows += section('Tax Computation');
+  rows += row('16. Tax', '$' + fmt(r.incomeTax));
+  if (r.seTax > 0) rows += row('23. Self-employment tax', '$' + fmt(r.seTax));
+  if (r.niit > 0) rows += row('NIIT (3.8%)', '$' + fmt(r.niit));
+  if (r.amt > 0) rows += row('AMT', '$' + fmt(r.amt));
+  rows += row('24. Total tax', '$' + fmt(r.totalTax), true);
+
+  rows += section('Payments');
+  if (r.totalFedWithheld > 0) rows += row('25d. Federal withheld', '$' + fmt(r.totalFedWithheld));
+  if (r.estimatedPayments > 0) rows += row('26. Estimated payments', '$' + fmt(r.estimatedPayments));
+  rows += row('33. Total payments', '$' + fmt(r.totalPayments), true);
+
+  rows += section('Result');
+  rows += row(r.refundOrOwed >= 0 ? '34. ESTIMATED REFUND' : '37. AMOUNT OWED', '$' + fmt(Math.abs(r.refundOrOwed)), true);
+  rows += row('Effective rate', r.effectiveRate.toFixed(1) + '%');
+  rows += row('Marginal rate', r.marginalRate + '%');
+
+  if (r.stateResult && r.stateResult.tax > 0) {
+    rows += section('State Tax — ' + r.stateResult.stateName);
+    rows += row('State taxable income', '$' + fmt(r.stateResult.taxableIncome));
+    rows += row('State tax', '$' + fmt(r.stateResult.tax));
+    if (r.stateResult.withheld > 0) rows += row('State withheld', '$' + fmt(r.stateResult.withheld));
+    rows += row(r.stateResult.refundOrOwed >= 0 ? 'State refund' : 'State owed', '$' + fmt(Math.abs(r.stateResult.refundOrOwed)), true);
+  }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Draft Tax Return ${TAX.year}</title>
+<style>body{font-family:-apple-system,sans-serif;max-width:700px;margin:40px auto;color:#1e293b;font-size:13px}
+h1{font-size:20px;text-align:center;margin-bottom:0}
+.sub{text-align:center;color:#64748b;font-size:12px;margin:4px 0 8px}
+.draft{text-align:center;color:#dc2626;font-weight:700;letter-spacing:2px;font-size:14px;padding:8px;border:2px solid #dc2626;margin:16px 0}
+table{width:100%;border-collapse:collapse}td{padding:4px 8px}
+.footer{margin-top:24px;padding-top:12px;border-top:1px solid #ccc;font-size:11px;color:#64748b;text-align:center;line-height:1.6}
+@media print{body{margin:20px}}</style></head><body>
+<div class="draft">DRAFT — NOT FOR FILING</div>
+<h1>U.S. Individual Income Tax Return</h1>
+<div class="sub">Form 1040 · Tax Year ${TAX.year} · ${FS_LABELS[r.filingStatus]}</div>
+<div class="sub">Generated ${new Date().toLocaleDateString()} by ReviewMyTaxes (${APP_VERSION})</div>
+<table>${rows}</table>
+<div class="footer">
+This is a DRAFT ESTIMATE for informational purposes only. Not reviewed by a CPA or tax attorney.<br>
+Do not file this document. Consult a qualified tax professional before filing.<br>
+Generated by ReviewMyTaxes · ${APP_VERSION} · reviewmytaxes.com
+</div></body></html>`;
+
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+  } else {
+    // Fallback: download as HTML
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tax-draft-${TAX.year}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  showToast('PDF ready — use "Save as PDF" in print dialog', 'success');
 }
 
 function showVerifyPanel() {
