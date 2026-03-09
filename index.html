@@ -1466,6 +1466,11 @@ window.WebSocket = function(url) {
   throw new Error('Blocked by privacy monitor');
 };
 
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function fmt(n) {
   return Math.abs(n||0).toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 });
 }
@@ -1554,7 +1559,7 @@ function openSourceModal(docType, fileName, subtitle, sourceURL) {
   if (isPdf) {
     bodyContent = `<iframe src="${sourceURL}#toolbar=1"></iframe>`;
   } else if (isImage) {
-    bodyContent = `<img src="${sourceURL}" alt="${fileName}">`;
+    bodyContent = `<img src="${sourceURL}" alt="${esc(fileName)}">`;
   } else {
     bodyContent = `<iframe src="${sourceURL}"></iframe>`;
   }
@@ -1564,7 +1569,7 @@ function openSourceModal(docType, fileName, subtitle, sourceURL) {
       <div class="source-modal-header">
         <div>
           <div class="title">Source Document: ${docType}</div>
-          <div class="filename">${fileName} — ${subtitle}</div>
+          <div class="filename">${esc(fileName)} — ${esc(subtitle)}</div>
         </div>
         <button class="close-btn" onclick="closeSourceDoc()">Close</button>
       </div>
@@ -1981,21 +1986,21 @@ function renderReturn(r) {
         ${r.totalWages > 0 ? (() => {
           let wageHtml = lineItem('1a. Wages, salaries, tips', r.totalWages, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''});
           r.w2s.forEach((w, i) => {
-            wageHtml += lineItem('   ' + (w.employer || 'Employer ' + (i+1)), w.wages, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
+            wageHtml += lineItem('   ' + (esc(w.employer) || 'Employer ' + (i+1)), w.wages, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
           });
           return wageHtml;
         })() : ''}
         ${r.totalInterest > 0 ? (() => {
           let intHtml = lineItem('2b. Taxable interest', r.totalInterest, {onClick: r.interest.some(i=>i._sourceURL) ? 'showInterestSource(0)' : ''});
           r.interest.forEach((item, i) => {
-            intHtml += lineItem('   ' + item.payer, item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+i+')' : ''});
+            intHtml += lineItem('   ' + esc(item.payer), item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+i+')' : ''});
           });
           return intHtml;
         })() : ''}
         ${r.totalOrdDiv > 0 ? (() => {
           let divHtml = lineItem('3a. Ordinary dividends', r.totalOrdDiv, {onClick: r.dividends.some(d=>d._sourceURL) ? 'showDividendSource(0)' : ''});
           r.dividends.forEach((item, i) => {
-            divHtml += lineItem('   ' + item.payer, item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+i+')' : ''});
+            divHtml += lineItem('   ' + esc(item.payer), item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+i+')' : ''});
           });
           return divHtml;
         })() : ''}
@@ -2041,7 +2046,7 @@ function renderReturn(r) {
           let payHtml = lineItem('25d. Federal tax withheld', r.totalFedWithheld, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''});
           if (r.w2s.length > 1) {
             r.w2s.forEach((w, i) => {
-              payHtml += lineItem('   ' + (w.employer || 'Employer ' + (i+1)), w.fedWithheld, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
+              payHtml += lineItem('   ' + (esc(w.employer) || 'Employer ' + (i+1)), w.fedWithheld, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
             });
           }
           return payHtml;
@@ -2162,9 +2167,9 @@ function renderReturn(r) {
   if (r.schedules.B) {
     const b = r.schedules.B;
     html += sectionHeader('Schedule B — Interest and Dividends', 'Form 1040, Schedule B');
-    b.interestItems.forEach((item, idx) => { html += lineItem('  ' + item.payer, item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+idx+')' : ''}); });
+    b.interestItems.forEach((item, idx) => { html += lineItem('  ' + esc(item.payer), item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+idx+')' : ''}); });
     html += lineItem('Total interest', b.totalInterest, {indent:true});
-    b.dividendItems.forEach((item, idx) => { html += lineItem('  ' + item.payer, item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+idx+')' : ''}); });
+    b.dividendItems.forEach((item, idx) => { html += lineItem('  ' + esc(item.payer), item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+idx+')' : ''}); });
     html += lineItem('Total ordinary dividends', b.totalOrdDiv, {indent:true});
   }
 
@@ -2214,7 +2219,7 @@ function renderReturn(r) {
       const gl = (t.proceeds||0) - (t.basis||0);
       const rowClick = t._sourceURL ? ` style="cursor:pointer" onclick="showCapGainSource(${idx})" title="Click to view source document"` : '';
       html += `<tr${rowClick}>
-        <td>${t.description}${t._sourceURL ? ' <span style="color:var(--accent-light);font-size:10px">&#8599;</span>' : ''}</td><td class="muted">${t.dateAcquired}</td><td class="muted">${t.dateSold}</td>
+        <td>${esc(t.description)}${t._sourceURL ? ' <span style="color:var(--accent-light);font-size:10px">&#8599;</span>' : ''}</td><td class="muted">${t.dateAcquired}</td><td class="muted">${t.dateSold}</td>
         <td class="right">$${fmt(t.proceeds)}</td><td class="right">$${fmt(t.basis)}</td>
         <td class="right">${moneyHtml(gl, true)}</td>
         <td class="center">${t.longTerm ? 'LT' : 'ST'}</td>
@@ -2500,11 +2505,11 @@ function renderDocuments(r) {
       html += `
         <div class="assumption-card" style="cursor:${w._sourceURL ? 'pointer' : 'default'}" ${w._sourceURL ? `onclick="showSourceDoc(${i})"` : ''}>
           <div style="flex:1">
-            <div style="font-size:14px;font-weight:600">${w.employer || 'Unknown Employer'}</div>
+            <div style="font-size:14px;font-weight:600">${esc(w.employer) || 'Unknown Employer'}</div>
             <div style="color:var(--text-dim);font-size:12px;margin-top:4px">
               Wages: $${fmt(w.wages)} · Fed withheld: $${fmt(w.fedWithheld)} · State withheld: $${fmt(w.stateWithheld)}
             </div>
-            ${w._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${w._sourceFileName}</div>` : ''}
+            ${w._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${esc(w._sourceFileName)}</div>` : ''}
           </div>
           ${w._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
         </div>
@@ -2519,7 +2524,7 @@ function renderDocuments(r) {
       html += `
         <div class="assumption-card" style="cursor:${item._sourceURL ? 'pointer' : 'default'}" ${item._sourceURL ? `onclick="showInterestSource(${i})"` : ''}>
           <div style="flex:1">
-            <div style="font-size:14px;font-weight:600">${item.payer}</div>
+            <div style="font-size:14px;font-weight:600">${esc(item.payer)}</div>
             <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Interest: $${fmt(item.amount)}</div>
           </div>
           ${item._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
@@ -2535,7 +2540,7 @@ function renderDocuments(r) {
       html += `
         <div class="assumption-card" style="cursor:${item._sourceURL ? 'pointer' : 'default'}" ${item._sourceURL ? `onclick="showDividendSource(${i})"` : ''}>
           <div style="flex:1">
-            <div style="font-size:14px;font-weight:600">${item.payer}</div>
+            <div style="font-size:14px;font-weight:600">${esc(item.payer)}</div>
             <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Ordinary: $${fmt(item.ordinary)} · Qualified: $${fmt(item.qualified)}</div>
           </div>
           ${item._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
@@ -2552,7 +2557,7 @@ function renderDocuments(r) {
       html += `
         <div class="assumption-card" style="cursor:${t._sourceURL ? 'pointer' : 'default'}" ${t._sourceURL ? `onclick="showCapGainSource(${i})"` : ''}>
           <div style="flex:1">
-            <div style="font-size:14px;font-weight:600">${t.description}</div>
+            <div style="font-size:14px;font-weight:600">${esc(t.description)}</div>
             <div style="color:var(--text-dim);font-size:12px;margin-top:4px">
               Proceeds: $${fmt(t.proceeds)} · Basis: $${fmt(t.basis)} · ${gl >= 0 ? 'Gain' : 'Loss'}: ${moneyHtml(gl, true)} · ${t.longTerm ? 'Long-term' : 'Short-term'}
             </div>
@@ -2572,7 +2577,7 @@ function renderDocuments(r) {
           <div style="flex:1">
             <div style="font-size:14px;font-weight:600">Nonemployee Compensation</div>
             <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Amount: $${fmt(src.amount)}</div>
-            ${src._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${src._sourceFileName}</div>` : ''}
+            ${src._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${esc(src._sourceFileName)}</div>` : ''}
           </div>
           <div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>
         </div>
@@ -2591,7 +2596,7 @@ function renderDocuments(r) {
             <div style="color:var(--text-dim);font-size:12px;margin-top:4px">
               Interest: $${fmt(src.mortgageInterest)}${src.propertyTax > 0 ? ` · Property tax: $${fmt(src.propertyTax)}` : ''}
             </div>
-            ${src._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${src._sourceFileName}</div>` : ''}
+            ${src._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${esc(src._sourceFileName)}</div>` : ''}
           </div>
           <div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>
         </div>
