@@ -590,14 +590,14 @@ function renderReview() {
         <span onclick="showDebugLog()" style="color:var(--text-dim);font-size:9px;cursor:pointer;margin-left:4px;opacity:0.5" title="View activity log">log</span>
       </div>
     </div>
-    <div class="tabs">
-      <button class="tab-btn ${STATE.tab==='return'?'active':''}" onclick="setTab('return')">Draft Return</button>
-      <button class="tab-btn ${STATE.tab==='assumptions'?'active':''}" onclick="setTab('assumptions')">Refine (${r.assumptions.filter(a=>!STATE.answeredQs.has(a.id)).length})</button>
-      <button class="tab-btn ${STATE.tab==='documents'?'active':''}" onclick="setTab('documents')">Documents</button>
-      <button class="tab-btn ${STATE.tab==='pricing'?'active':''}" onclick="setTab('pricing')">Pricing</button>
-      <button class="tab-btn ${STATE.tab==='compare'?'active':''}" onclick="setTab('compare')">Compare</button>
+    <div class="tabs" role="tablist" aria-label="Tax return sections">
+      <button class="tab-btn ${STATE.tab==='return'?'active':''}" onclick="setTab('return')" role="tab" aria-selected="${STATE.tab==='return'}" aria-controls="tab-content">Draft Return</button>
+      <button class="tab-btn ${STATE.tab==='assumptions'?'active':''}" onclick="setTab('assumptions')" role="tab" aria-selected="${STATE.tab==='assumptions'}" aria-controls="tab-content">Refine (${r.assumptions.filter(a=>!STATE.answeredQs.has(a.id)).length})</button>
+      <button class="tab-btn ${STATE.tab==='documents'?'active':''}" onclick="setTab('documents')" role="tab" aria-selected="${STATE.tab==='documents'}" aria-controls="tab-content">Documents</button>
+      <button class="tab-btn ${STATE.tab==='pricing'?'active':''}" onclick="setTab('pricing')" role="tab" aria-selected="${STATE.tab==='pricing'}" aria-controls="tab-content">Pricing</button>
+      <button class="tab-btn ${STATE.tab==='compare'?'active':''}" onclick="setTab('compare')" role="tab" aria-selected="${STATE.tab==='compare'}" aria-controls="tab-content">Compare</button>
     </div>
-    <div class="container tab-fade-in">
+    <div class="container tab-fade-in" role="tabpanel" id="tab-content">
       ${STATE.tab === 'return' ? renderReturn(r) : ''}
       ${STATE.tab === 'assumptions' ? renderAssumptions(r) : ''}
       ${STATE.tab === 'documents' ? renderDocuments(r) : ''}
@@ -695,6 +695,36 @@ function renderReturn(r) {
         </div>
         ` : ''}
 
+        ${(() => {
+          // Income breakdown mini-chart
+          const sources = [];
+          if (r.totalWages > 0) sources.push({ label: 'Wages', amount: r.totalWages, color: '#3b82f6' });
+          if (r.totalInterest > 0) sources.push({ label: 'Interest', amount: r.totalInterest, color: '#22c55e' });
+          if (r.totalOrdDiv > 0) sources.push({ label: 'Dividends', amount: r.totalOrdDiv, color: '#8b5cf6' });
+          if (r.schedCNet > 0) sources.push({ label: 'Self-employment', amount: r.schedCNet, color: '#f97316' });
+          if ((r.netSTCG + r.netLTCG) > 0) sources.push({ label: 'Capital gains', amount: r.netSTCG + r.netLTCG, color: '#eab308' });
+          if (r.schedENet > 0) sources.push({ label: 'Rental', amount: r.schedENet, color: '#06b6d4' });
+          if (r.totalRetirement > 0) sources.push({ label: 'Retirement', amount: r.totalRetirement, color: '#ec4899' });
+          if (r.ssaTaxable > 0) sources.push({ label: 'Social Security', amount: r.ssaTaxable, color: '#14b8a6' });
+          const other = r.totalIncome - sources.reduce((s, x) => s + x.amount, 0);
+          if (other > 100) sources.push({ label: 'Other', amount: other, color: '#64748b' });
+          if (sources.length <= 1 || r.totalIncome <= 0) return '';
+          let html = '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap">';
+          // Stacked bar
+          html += '<div style="flex:1;min-width:200px;height:24px;border-radius:4px;overflow:hidden;display:flex">';
+          sources.forEach(s => {
+            const pct = (s.amount / r.totalIncome * 100);
+            if (pct >= 1) html += '<div title="' + s.label + ': $' + fmt(s.amount) + ' (' + pct.toFixed(0) + '%)" style="width:' + pct + '%;background:' + s.color + ';height:100%"></div>';
+          });
+          html += '</div>';
+          // Legend
+          html += '<div style="display:flex;flex-wrap:wrap;gap:8px 14px">';
+          sources.filter(s => s.amount / r.totalIncome >= 0.01).forEach(s => {
+            html += '<div style="font-size:11px;display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;border-radius:2px;background:' + s.color + '"></div><span style="color:var(--text-muted)">' + s.label + '</span><span style="color:var(--text);font-weight:600">$' + fmt(s.amount) + '</span></div>';
+          });
+          html += '</div></div>';
+          return html;
+        })()}
         ${sectionHeader('Form 1040 — Income', 'Lines 1–9')}
         ${r.totalWages > 0 ? (() => {
           let wageHtml = lineItem('1a. Wages, salaries, tips', r.totalWages, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''});
@@ -3125,6 +3155,19 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.key === 'L') {
     e.preventDefault();
     showDebugLog();
+  }
+  // Arrow key tab navigation when a tab button is focused
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target.classList.contains('tab-btn')) {
+    const tabs = ['return', 'assumptions', 'documents', 'pricing', 'compare'];
+    const idx = tabs.indexOf(STATE.tab);
+    if (idx !== -1) {
+      const newIdx = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+      setTab(tabs[newIdx]);
+      setTimeout(() => {
+        const btns = document.querySelectorAll('.tab-btn');
+        if (btns[newIdx]) btns[newIdx].focus();
+      }, 50);
+    }
   }
 });
 
