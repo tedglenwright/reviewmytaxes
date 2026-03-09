@@ -1865,6 +1865,7 @@ function renderReview() {
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         ${totalCost > 0 ? `<div class="cost-badge">${pricedQs} question${pricedQs>1?'s':''} · $${totalCost}</div>` : ''}
+        <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
         <span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span>
       </div>
@@ -2995,22 +2996,67 @@ function sumEstPayments() {
   if (el && total > 0) el.value = total;
 }
 
-function showImpactToast(diff) {
+function showToast(message, type) {
+  // Remove existing toasts
+  document.querySelectorAll('.app-toast').forEach(t => t.remove());
   const toast = document.createElement('div');
-  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:700;animation:fadeIn 0.3s ease;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
-  if (diff > 0) {
-    toast.style.background = 'rgba(34,197,94,0.15)';
-    toast.style.border = '1px solid var(--green)';
-    toast.style.color = 'var(--green)';
-    toast.textContent = `Refund increased by $${fmt(diff)}`;
-  } else {
-    toast.style.background = 'rgba(239,68,68,0.15)';
-    toast.style.border = '1px solid var(--red)';
-    toast.style.color = 'var(--red)';
-    toast.textContent = `Refund decreased by $${fmt(Math.abs(diff))}`;
-  }
+  toast.className = 'app-toast';
+  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:700;animation:slideUp 0.3s ease;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+  const styles = {
+    success: { bg: 'rgba(34,197,94,0.15)', border: 'var(--green)', color: 'var(--green)' },
+    error: { bg: 'rgba(239,68,68,0.15)', border: 'var(--red)', color: 'var(--red)' },
+    info: { bg: 'rgba(59,130,246,0.15)', border: 'var(--accent)', color: 'var(--accent-light)' },
+  };
+  const s = styles[type] || styles.info;
+  toast.style.background = s.bg;
+  toast.style.border = '1px solid ' + s.border;
+  toast.style.color = s.color;
+  toast.textContent = message;
   document.body.appendChild(toast);
   setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.5s'; setTimeout(() => toast.remove(), 500); }, 3000);
+}
+
+function showImpactToast(diff) {
+  if (diff > 0) {
+    showToast(`Refund increased by $${fmt(diff)}`, 'success');
+  } else if (diff < 0) {
+    showToast(`Refund decreased by $${fmt(Math.abs(diff))}`, 'error');
+  }
+}
+
+function shareSummary() {
+  const r = STATE.result;
+  if (!r) return;
+  const summary = [
+    `Tax Return Draft Summary (${TAX.year})`,
+    `Filing Status: ${FS_LABELS[r.filingStatus]}`,
+    `Total Income: $${fmt(r.totalIncome)}`,
+    `Adjusted Gross Income: $${fmt(r.agi)}`,
+    `Deductions: $${fmt(r.deduction)} (${r.usingItemized ? 'Itemized' : 'Standard'})`,
+    `Taxable Income: $${fmt(r.taxableIncome)}`,
+    `Total Tax: $${fmt(r.totalTax)}`,
+    `Total Payments: $${fmt(r.totalPayments)}`,
+    r.refundOrOwed >= 0 ? `Estimated Refund: $${fmt(r.refundOrOwed)}` : `Amount Owed: $${fmt(Math.abs(r.refundOrOwed))}`,
+    `Effective Rate: ${r.effectiveRate.toFixed(1)}% | Marginal Rate: ${r.marginalRate}%`,
+    '',
+    'Generated at reviewmytaxes.com — DRAFT, NOT FOR FILING',
+  ].join('\n');
+
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(summary).then(() => {
+      showToast('Summary copied to clipboard', 'info');
+    }).catch(() => {
+      showToast('Could not copy — try Ctrl+C', 'error');
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = summary;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast('Summary copied to clipboard', 'info');
+  }
 }
 
 function showVerifyPanel() {
