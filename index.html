@@ -73,7 +73,7 @@
   .btn-primary:hover { background: #2563eb; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .demo-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 16px; }
+  .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
   .demo-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; padding: 16px; text-align: left;
@@ -393,7 +393,7 @@
     .container { padding: 16px; }
     .summary-grid { grid-template-columns: repeat(2,1fr); gap: 8px; }
     .summary-card .val { font-size: 18px; }
-    .demo-grid { grid-template-columns: repeat(2,1fr); gap: 8px; }
+    .demo-grid { grid-template-columns: repeat(2,1fr); }
     .pricing-grid { grid-template-columns: 1fr; }
     .security-grid { grid-template-columns: 1fr; }
     .how-steps { grid-template-columns: repeat(2,1fr); }
@@ -1463,6 +1463,20 @@ const DEMOS = {
       numChildren: 2,
       numOtherDeps: 0,
       dependents: 2,
+    }
+  },
+  retiree: {
+    label: 'Retiree',
+    desc: 'Pension + Social Security + 1099-R, part-time W-2',
+    data: {
+      filingStatus: 'mfj',
+      w2s: [{ employer:'Home Depot (part-time)', wages:18500, fedWithheld:1200, stateWithheld:600 }],
+      interest: [{ payer:'Fidelity Money Market', amount:3200 }, { payer:'Treasury Bills', amount:4800 }],
+      dividends: [{ payer:'Vanguard Wellesley', ordinary:6200, qualified:4800 }],
+      retirementDist: [
+        { payer:'State Teachers Pension', grossDistribution:42000, taxableAmount:42000, fedWithheld:6300, stateWithheld:2100 },
+        { payer:'Fidelity 401(k)', grossDistribution:15000, taxableAmount:15000, fedWithheld:1500, stateWithheld:0 },
+      ],
     }
   }
 };
