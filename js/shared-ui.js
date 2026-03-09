@@ -88,6 +88,33 @@ function showToast(message, type) {
   setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.5s'; setTimeout(() => toast.remove(), 500); }, 3000);
 }
 
+function safeCompute(data) {
+  try {
+    const result = computeTaxReturn(data);
+    saveTaxData();
+    return result;
+  } catch (err) {
+    rlog('COMPUTE_ERROR', err.message);
+    console.error('Tax computation error:', err);
+    showToast('Calculation error — some values may be incorrect', 'error');
+    return {
+      filingStatus: data.filingStatus || 'single',
+      w2s: data.w2s || [], interest: data.interest || [], dividends: data.dividends || [],
+      retirementDist: [], totalWages: 0, totalInterest: 0, totalOrdDiv: 0, totalQualDiv: 0,
+      totalRetirement: 0, ssaBenefits: 0, ssaTaxable: 0, schedCNet: 0, schedENet: 0,
+      netSTCG: 0, netLTCG: 0, homeSaleGain: 0, homeSaleExclusion: 0, homeSaleTaxable: 0,
+      otherIncome: 0, totalIncome: 0, adjustments: 0, agi: 0, deduction: 0, usingItemized: false,
+      qbiDeduction: 0, taxableIncome: 0, ordinaryTax: 0, ltcgTax: 0, incomeTax: 0,
+      seTax: 0, niit: 0, amt: 0, totalTax: 0, totalFedWithheld: 0, totalStateWithheld: 0,
+      estimatedPayments: 0, totalPayments: 0, refundOrOwed: 0, effectiveRate: 0, marginalRate: 0,
+      underpaymentPenalty: 0, ptcReconciliation: 0,
+      assumptions: [], schedules: { '1':{}, '3':{totalCredits:0,totalNonrefundableCredits:0,eitcCredit:0}, SE:{} },
+      _necSources: [], _mortgageSources: [],
+      _error: err.message,
+    };
+  }
+}
+
 function showImpactToast(diff) {
   if (diff > 0) {
     showToast(`Refund increased by $${fmt(diff)}`, 'success');

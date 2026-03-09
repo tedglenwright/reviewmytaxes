@@ -200,18 +200,24 @@ function openSourceModal(docType, fileName, subtitle, sourceURL) {
   }
 
   overlay.innerHTML = `
-    <div class="source-modal">
+    <div class="source-modal" role="dialog" aria-modal="true" aria-label="Source document: ${esc(docType)}">
       <div class="source-modal-header">
         <div>
           <div class="title">Source Document: ${docType}</div>
           <div class="filename">${esc(fileName)} — ${esc(subtitle)}</div>
         </div>
-        <button class="close-btn" onclick="closeSourceDoc()">Close</button>
+        <button class="close-btn" id="source-close-btn" onclick="closeSourceDoc()">Close</button>
       </div>
       <div class="source-modal-body">${bodyContent}</div>
     </div>
   `;
   document.body.appendChild(overlay);
+  // Focus the close button and trap focus within modal
+  const closeBtn = document.getElementById('source-close-btn');
+  if (closeBtn) closeBtn.focus();
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeSourceDoc();
+  });
 }
 
 function closeSourceDoc() {
@@ -1656,17 +1662,28 @@ function renderDocuments(r) {
 function addFiles(fileList) {
   const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'];
   const validExts = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp'];
-  let skipped = 0;
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  let skipped = 0, tooLarge = 0, dupes = 0;
+  const existingNames = new Set(STATE.files.map(f => f.name + '_' + f.size));
   for (const f of fileList) {
     const ext = '.' + f.name.split('.').pop().toLowerCase();
-    if (validTypes.includes(f.type) || validExts.includes(ext)) {
-      STATE.files.push(f);
-    } else {
+    if (!validTypes.includes(f.type) && !validExts.includes(ext)) {
       skipped++;
+    } else if (f.size > MAX_FILE_SIZE) {
+      tooLarge++;
+    } else if (existingNames.has(f.name + '_' + f.size)) {
+      dupes++;
+    } else {
+      STATE.files.push(f);
+      existingNames.add(f.name + '_' + f.size);
     }
   }
-  if (skipped > 0) {
-    showToast(`${skipped} file${skipped > 1 ? 's' : ''} skipped — only PDF and image files are supported`, 'error');
+  const msgs = [];
+  if (skipped > 0) msgs.push(`${skipped} unsupported format`);
+  if (tooLarge > 0) msgs.push(`${tooLarge} over 50MB limit`);
+  if (dupes > 0) msgs.push(`${dupes} duplicate`);
+  if (msgs.length > 0) {
+    showToast(`Skipped: ${msgs.join(', ')}`, 'error');
   }
   render();
 }
@@ -1755,34 +1772,6 @@ async function startParsing() {
     }
     render();
   }, 1500);
-}
-
-function safeCompute(data) {
-  try {
-    const result = computeTaxReturn(data);
-    saveTaxData();
-    return result;
-  } catch (err) {
-    rlog('COMPUTE_ERROR', err.message);
-    console.error('Tax computation error:', err);
-    showToast('Calculation error — some values may be incorrect', 'error');
-    // Return a minimal result so the app doesn't crash
-    return {
-      filingStatus: data.filingStatus || 'single',
-      w2s: data.w2s || [], interest: data.interest || [], dividends: data.dividends || [],
-      retirementDist: [], totalWages: 0, totalInterest: 0, totalOrdDiv: 0, totalQualDiv: 0,
-      totalRetirement: 0, ssaBenefits: 0, ssaTaxable: 0, schedCNet: 0, schedENet: 0,
-      netSTCG: 0, netLTCG: 0, homeSaleGain: 0, homeSaleExclusion: 0, homeSaleTaxable: 0,
-      otherIncome: 0, totalIncome: 0, adjustments: 0, agi: 0, deduction: 0, usingItemized: false,
-      qbiDeduction: 0, taxableIncome: 0, ordinaryTax: 0, ltcgTax: 0, incomeTax: 0,
-      seTax: 0, niit: 0, amt: 0, totalTax: 0, totalFedWithheld: 0, totalStateWithheld: 0,
-      estimatedPayments: 0, totalPayments: 0, refundOrOwed: 0, effectiveRate: 0, marginalRate: 0,
-      underpaymentPenalty: 0, ptcReconciliation: 0,
-      assumptions: [], schedules: { '1':{}, '3':{totalCredits:0,totalNonrefundableCredits:0,eitcCredit:0}, SE:{} },
-      _necSources: [], _mortgageSources: [],
-      _error: err.message,
-    };
-  }
 }
 
 function loadDemo(key) {

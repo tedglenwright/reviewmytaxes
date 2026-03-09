@@ -621,6 +621,14 @@ function computeTaxReturn(data) {
     assumptions.push({ id:'no_amt', text:'AMT does not apply (regular tax exceeds tentative minimum tax)', impact:'low' });
   }
 
+  // Sanity checks for suspiciously large parsed values
+  if (totalWages > 1000000) {
+    assumptions.push({ id:'high_wages', text:`Wages of $${totalWages.toLocaleString()} detected — verify this is correct (OCR may have misread your W-2)`, impact:'high' });
+  }
+  if (totalIncome > 5000000) {
+    assumptions.push({ id:'high_income', text:`Total income over $5M detected — verify all amounts are correct`, impact:'high' });
+  }
+
   return {
     filingStatus: fs,
     w2s: data.w2s || [],

@@ -56,7 +56,7 @@ if (!loadTaxData() || !STATE.taxData) {
     </div>`;
 } else {
   let activeSchedule = 'C';
-  let result = computeTaxReturn(STATE.taxData);
+  let result = safeCompute(STATE.taxData);
 
   function setSchedule(sched) {
     activeSchedule = sched;
@@ -64,13 +64,15 @@ if (!loadTaxData() || !STATE.taxData) {
   }
 
   function saveAndRecalculate() {
-    result = computeTaxReturn(STATE.taxData);
+    result = safeCompute(STATE.taxData);
     saveTaxData();
 
     // Payment gate — each save counts as a question
     const saveKey = 'sched_save_' + activeSchedule + '_' + Date.now();
     if (!STATE.answeredQs.has('sched_' + activeSchedule)) {
       if (PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.per_question) {
+        saveTaxData();
+        localStorage.setItem('rmt_pending_question', 'sched_' + activeSchedule);
         window.location.href = STRIPE_PAYMENT_LINKS.per_question;
         return;
       }
@@ -80,7 +82,7 @@ if (!loadTaxData() || !STATE.taxData) {
           const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
           payment.usedQuestions = (payment.usedQuestions || 0) + 1;
           localStorage.setItem('rmt_payment', JSON.stringify(payment));
-        } catch(e) {}
+        } catch(e) { rlog('PAYMENT_UPDATE_ERROR', e.message); }
       }
       STATE.answeredQs.add('sched_' + activeSchedule);
       saveAnswered();
@@ -100,8 +102,7 @@ if (!loadTaxData() || !STATE.taxData) {
     const schedules = [];
 
     // Determine which schedules are relevant
-    if (d.scheduleC || (d.w2s && d.w2s.length === 0)) schedules.push('C');
-    else schedules.push('C');
+    schedules.push('C');
     schedules.push('D', 'E', 'A', '8824');
 
     app.innerHTML = `
@@ -495,7 +496,7 @@ if (!loadTaxData() || !STATE.taxData) {
       clearTimeout(_previewTimer);
       _previewTimer = setTimeout(() => {
         collectFormData();
-        const preview = computeTaxReturn(STATE.taxData);
+        const preview = safeCompute(STATE.taxData);
         const previewBox = document.getElementById('live-preview');
         if (previewBox) {
           const diff = preview.refundOrOwed - result.refundOrOwed;

@@ -559,6 +559,21 @@
     .quarterly-grid { grid-template-columns: repeat(2, 1fr); }
   }
 
+  /* Focus indicators for accessibility */
+  :focus-visible {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 2px;
+  }
+  button:focus-visible, .tab-btn:focus-visible {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 2px;
+  }
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 0;
+    border-color: var(--accent);
+  }
+
   /* Better mobile touch targets */
   @media (max-width: 768px) {
     .btn-answer { min-height: 44px; min-width: 44px; }
