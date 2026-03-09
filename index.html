@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tax Return Draft Preview — 2025</title>
+<script src="https://js.stripe.com/v3/"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
@@ -328,6 +329,32 @@
   .gh-footer a { color: var(--accent-light); text-decoration: none; font-size: 12px; font-weight: 600; }
   .gh-footer a:hover { text-decoration: underline; }
 
+  /* Toast notification */
+  .impact-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 10000; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 700;
+    animation: slideUp 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+  /* Form 8949 clickable rows */
+  .form8949-table tr[onclick] { cursor: pointer; transition: background 0.15s; }
+  .form8949-table tr[onclick]:hover { background: rgba(139,92,246,0.08); }
+
+  /* Print styles */
+  @media print {
+    body { background: #fff; color: #000; }
+    .top-bar, .tabs, .btn-back, .cost-badge, .btn-answer, .footer-disclaimer a,
+    .watermark, .disclaimer-box { display: none !important; }
+    .container { max-width: 100%; padding: 12px; }
+    .summary-card { border: 1px solid #ccc; }
+    .section-header { border-bottom-color: #333; }
+    .line-item.clickable { cursor: default; }
+    .line-item.clickable span:first-child::after { content: '' !important; }
+    .refund-box { border-color: #333; }
+    :root { --surface: #f5f5f5; --border: #ccc; --text: #000; --text-muted: #555; --text-dim: #888; }
+  }
+
   /* Responsive */
   @media (max-width: 768px) {
     .summary-grid { grid-template-columns: repeat(2,1fr); }
@@ -336,6 +363,9 @@
     .security-grid { grid-template-columns: 1fr; }
     .how-steps { grid-template-columns: repeat(2,1fr); }
     .form8949-table { font-size: 10px; }
+    .top-bar { flex-direction: column; gap: 8px; padding: 8px 16px; }
+    .top-bar-left { flex-wrap: wrap; gap: 8px; }
+    .source-modal { width: 95vw; height: 90vh; }
   }
 </style>
 </head>
@@ -346,10 +376,28 @@
 // ═══════════════════════════════════════════════════════════════
 // CONFIGURATION — Change this to your GitHub repo URL after setup
 // ═══════════════════════════════════════════════════════════════
+const APP_VERSION = 'v0.4.0-beta';
 const GITHUB_REPO = 'https://github.com/tedglenwright/reviewmytaxes';
 const GITHUB_SOURCE = GITHUB_REPO + '/blob/main/index.html';
 const GITHUB_ISSUES = GITHUB_REPO + '/issues';
 const GITHUB_LICENSE = GITHUB_REPO + '/blob/main/LICENSE';
+
+// ═══════════════════════════════════════════════════════════════
+// STRIPE CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+// TODO: Replace with your Stripe publishable key after signup
+const STRIPE_PUBLISHABLE_KEY = 'pk_test_REPLACE_WITH_YOUR_KEY';
+// TODO: Replace with your Stripe Payment Links (created in Stripe Dashboard)
+const STRIPE_PAYMENT_LINKS = {
+  single_question: '', // $5 payment link
+  three_questions: '', // $15 payment link (bundle discount)
+};
+let stripeInstance = null;
+try {
+  if (STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes('REPLACE')) {
+    stripeInstance = Stripe(STRIPE_PUBLISHABLE_KEY);
+  }
+} catch(e) { console.warn('Stripe not loaded:', e); }
 
 // ═══════════════════════════════════════════════════════════════
 // 2025 TAX PARAMETERS
@@ -1003,20 +1051,23 @@ function aggregateParsedDocs(docs) {
         data.w2s.push({ employer: doc.employer, wages: doc.wages, fedWithheld: doc.fedWithheld, stateWithheld: doc.stateWithheld, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
         break;
       case '1099int':
-        data.interest.push({ payer: doc.payer, amount: doc.amount });
+        data.interest.push({ payer: doc.payer, amount: doc.amount, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
         break;
       case '1099div':
-        data.dividends.push({ payer: doc.payer, ordinary: doc.ordinary, qualified: doc.qualified });
+        data.dividends.push({ payer: doc.payer, ordinary: doc.ordinary, qualified: doc.qualified, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
         break;
       case '1099nec':
         necTotal += doc.amount;
+        if (doc._sourceURL) data._necSources = (data._necSources || []).concat({ _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName, amount: doc.amount });
         break;
       case '1099b':
+        doc.transactions.forEach(t => { t._sourceURL = doc._sourceURL; t._sourceFileName = doc._sourceFileName; });
         data.capitalGains.push(...doc.transactions);
         break;
       case '1098':
         mortgageInterest += doc.mortgageInterest || 0;
         propertyTax += doc.propertyTax || 0;
+        if (doc._sourceURL) data._mortgageSources = (data._mortgageSources || []).concat({ _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName, mortgageInterest: doc.mortgageInterest, propertyTax: doc.propertyTax });
         break;
     }
   }
@@ -1143,9 +1194,14 @@ function computeTaxReturn(data) {
   const capGainIncome = Math.max(netSTCG + netLTCG, -TAX.capitalLossLimit);
   const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome;
 
+  // Additional adjustments from user input
+  const hsaDed = Math.min(data.hsaContribution || 0, fs === 'mfj' ? 8550 : 4300);
+  const iraDed = Math.min(data.iraContribution || 0, 7000);
+  const studentLoanDed = Math.min(data.studentLoanInterest || 0, 2500);
+
   // Adjustments
-  const adjustments = seDeduction;
-  schedules['1'] = { seDeduction, totalAdjustments: adjustments };
+  const adjustments = seDeduction + hsaDed + iraDed + studentLoanDed;
+  schedules['1'] = { seDeduction, hsaDed, iraDed, studentLoanDed, totalAdjustments: adjustments };
 
   // AGI
   const agi = totalIncome - adjustments;
@@ -1204,25 +1260,40 @@ function computeTaxReturn(data) {
     niit = Math.round(Math.min(investIncome, agi - TAX.niitThreshold[fs]) * TAX.niitRate);
   }
 
-  schedules['2'] = { seTax, niit, totalAdditionalTax: seTax + niit };
-  schedules['3'] = { totalCredits: 0 };
+  // Credits
+  const numChildren = data.numChildren || 0;
+  const numOtherDeps = data.numOtherDeps || 0;
+  const childTaxCredit = numChildren * 2000;
+  const otherDepCredit = numOtherDeps * 500;
+  const educationCredit = data.educationCredit || 0;
+  const eitcCredit = data.eitc || 0;
+  const totalNonrefundableCredits = Math.min(incomeTax, childTaxCredit + otherDepCredit + educationCredit);
+  const totalRefundableCredits = eitcCredit;
+  const totalCredits = totalNonrefundableCredits + totalRefundableCredits;
 
-  const totalTax = incomeTax + seTax + niit;
-  const totalPayments = totalFedWithheld + (data.estimatedPayments||0);
+  schedules['2'] = { seTax, niit, totalAdditionalTax: seTax + niit };
+  schedules['3'] = { childTaxCredit, otherDepCredit, educationCredit, eitcCredit, totalNonrefundableCredits, totalRefundableCredits, totalCredits };
+
+  const totalTax = Math.max(0, incomeTax - totalNonrefundableCredits) + seTax + niit;
+  const totalPayments = totalFedWithheld + (data.estimatedPayments||0) + totalRefundableCredits;
   const refundOrOwed = totalPayments - totalTax;
 
   // Default assumptions
   if (!data.filingStatus) assumptions.unshift({ id:'filing_status', text:'Assumed Single filing status based on single W-2', impact:'high' });
   else if (data.w2s && data.w2s.length >= 2) assumptions.unshift({ id:'filing_status', text:'Assumed Married Filing Jointly based on multiple W-2s — could be MFS', impact:'high' });
-  if (!data.dependents) assumptions.push({ id:'dependents', text:'Assumed no dependents — child tax credit not applied', impact:'high' });
-  assumptions.push({ id:'no_credits', text:'Did not apply education credits, child tax credit, or EITC', impact:'high' });
-  assumptions.push({ id:'no_hsa', text:'Did not account for HSA, IRA, or 401(k) contributions beyond what employers reported', impact:'medium' });
+  if (!data.dependents) assumptions.push({ id:'dependents', text:'Assumed no dependents — child tax credit ($2,000/child) not applied', impact:'high' });
+  if (!data.educationCredit && !data.eitc) assumptions.push({ id:'no_credits', text:'Did not apply education credits, child tax credit, or EITC', impact:'high' });
+  if (!data.hsaContribution && !data.iraContribution && !data.studentLoanInterest) assumptions.push({ id:'no_hsa', text:'Did not account for HSA, IRA contributions, or student loan interest', impact:'medium' });
   assumptions.push({ id:'no_state', text:'State return not calculated — federal only', impact:'low' });
   assumptions.push({ id:'no_amt', text:'Did not calculate Alternative Minimum Tax (AMT)', impact:'medium' });
 
   return {
     filingStatus: fs,
     w2s: data.w2s || [],
+    interest: data.interest || [],
+    dividends: data.dividends || [],
+    _necSources: data._necSources || [],
+    _mortgageSources: data._mortgageSources || [],
     totalWages, totalInterest, totalOrdDiv, totalQualDiv,
     schedCNet, netSTCG, netLTCG, capitalLossCarryover,
     totalIncome, adjustments, agi, deduction, usingItemized,
@@ -1322,7 +1393,7 @@ let STATE = {
 // ═══════════════════════════════════════════════════════════════
 const _origFetch = window.fetch;
 const _origXHROpen = XMLHttpRequest.prototype.open;
-const ALLOWED_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com']; // only for Tesseract WASM + PDF.js
+const ALLOWED_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'js.stripe.com', 'm.stripe.com', 'api.stripe.com', 'q.stripe.com']; // Tesseract WASM + PDF.js + Stripe
 
 window.fetch = function(...args) {
   const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
@@ -1397,8 +1468,56 @@ function showSourceDoc(docIndex) {
   if (!r || !r.w2s || !r.w2s[docIndex]) return;
   const w2 = r.w2s[docIndex];
   if (!w2._sourceURL) return;
+  openSourceModal('W-2', w2._sourceFileName, w2.employer || 'Unknown employer', w2._sourceURL);
+}
 
-  const fileName = w2._sourceFileName || 'Source Document';
+function showAllSourceDocs() {
+  const r = STATE.result;
+  if (!r || !r.w2s) return;
+  const idx = r.w2s.findIndex(w => w._sourceURL);
+  if (idx >= 0) showSourceDoc(idx);
+}
+
+function showInterestSource(idx) {
+  const r = STATE.result;
+  if (!r || !r.interest || !r.interest[idx]) return;
+  const item = r.interest[idx];
+  if (!item._sourceURL) return;
+  openSourceModal('1099-INT', item._sourceFileName, item.payer || 'Financial Institution', item._sourceURL);
+}
+
+function showDividendSource(idx) {
+  const r = STATE.result;
+  if (!r || !r.dividends || !r.dividends[idx]) return;
+  const item = r.dividends[idx];
+  if (!item._sourceURL) return;
+  openSourceModal('1099-DIV', item._sourceFileName, item.payer || 'Financial Institution', item._sourceURL);
+}
+
+function showNECSource() {
+  const r = STATE.result;
+  if (!r || !r._necSources || r._necSources.length === 0) return;
+  const src = r._necSources[0];
+  openSourceModal('1099-NEC', src._sourceFileName, 'Nonemployee Compensation', src._sourceURL);
+}
+
+function showMortgageSource() {
+  const r = STATE.result;
+  if (!r || !r._mortgageSources || r._mortgageSources.length === 0) return;
+  const src = r._mortgageSources[0];
+  openSourceModal('1098', src._sourceFileName, 'Mortgage Interest Statement', src._sourceURL);
+}
+
+function showCapGainSource(idx) {
+  const r = STATE.result;
+  if (!r || !r.schedules || !r.schedules.form8949 || !r.schedules.form8949[idx]) return;
+  const item = r.schedules.form8949[idx];
+  if (!item._sourceURL) return;
+  openSourceModal('1099-B', item._sourceFileName, item.description, item._sourceURL);
+}
+
+function openSourceModal(docType, fileName, subtitle, sourceURL) {
+  fileName = fileName || 'Source Document';
   const isImage = /\.(png|jpg|jpeg|gif|bmp|webp|heic)$/i.test(fileName);
   const isPdf = /\.pdf$/i.test(fileName);
 
@@ -1409,19 +1528,19 @@ function showSourceDoc(docIndex) {
 
   let bodyContent;
   if (isPdf) {
-    bodyContent = `<iframe src="${w2._sourceURL}#toolbar=1"></iframe>`;
+    bodyContent = `<iframe src="${sourceURL}#toolbar=1"></iframe>`;
   } else if (isImage) {
-    bodyContent = `<img src="${w2._sourceURL}" alt="${fileName}">`;
+    bodyContent = `<img src="${sourceURL}" alt="${fileName}">`;
   } else {
-    bodyContent = `<iframe src="${w2._sourceURL}"></iframe>`;
+    bodyContent = `<iframe src="${sourceURL}"></iframe>`;
   }
 
   overlay.innerHTML = `
     <div class="source-modal">
       <div class="source-modal-header">
         <div>
-          <div class="title">Source Document: W-2</div>
-          <div class="filename">${fileName} — ${w2.employer || 'Unknown employer'}</div>
+          <div class="title">Source Document: ${docType}</div>
+          <div class="filename">${fileName} — ${subtitle}</div>
         </div>
         <button class="close-btn" onclick="closeSourceDoc()">Close</button>
       </div>
@@ -1429,14 +1548,6 @@ function showSourceDoc(docIndex) {
     </div>
   `;
   document.body.appendChild(overlay);
-}
-
-function showAllSourceDocs() {
-  const r = STATE.result;
-  if (!r || !r.w2s) return;
-  // Show the first W-2 that has a source URL
-  const idx = r.w2s.findIndex(w => w._sourceURL);
-  if (idx >= 0) showSourceDoc(idx);
 }
 
 function closeSourceDoc() {
@@ -1461,6 +1572,7 @@ function renderUpload() {
 
   app.innerHTML = `
     <div class="container">
+      <div style="text-align:right;margin-bottom:-20px"><span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span></div>
       <div class="upload-hero">
         <h1>Tax Return Draft Preview</h1>
         <p>Upload your tax documents and get an instant draft return with all schedules</p>
@@ -1689,16 +1801,22 @@ function renderReview() {
         <span style="color:var(--red);font-weight:700;font-size:13px;letter-spacing:2px">DRAFT</span>
         <span style="color:var(--text-muted);font-size:13px">${FS_LABELS[r.filingStatus]} · Tax Year ${TAX.year}</span>
       </div>
-      ${totalCost > 0 ? `<div class="cost-badge">${pricedQs} question${pricedQs>1?'s':''} · $${totalCost}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:8px">
+        ${totalCost > 0 ? `<div class="cost-badge">${pricedQs} question${pricedQs>1?'s':''} · $${totalCost}</div>` : ''}
+        <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
+        <span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span>
+      </div>
     </div>
     <div class="tabs">
       <button class="tab-btn ${STATE.tab==='return'?'active':''}" onclick="setTab('return')">Draft Return</button>
-      <button class="tab-btn ${STATE.tab==='assumptions'?'active':''}" onclick="setTab('assumptions')">Assumptions (${r.assumptions.length})</button>
+      <button class="tab-btn ${STATE.tab==='assumptions'?'active':''}" onclick="setTab('assumptions')">Refine (${r.assumptions.filter(a=>!STATE.answeredQs.has(a.id)).length})</button>
+      <button class="tab-btn ${STATE.tab==='documents'?'active':''}" onclick="setTab('documents')">Documents</button>
       <button class="tab-btn ${STATE.tab==='pricing'?'active':''}" onclick="setTab('pricing')">Pricing</button>
     </div>
     <div class="container">
       ${STATE.tab === 'return' ? renderReturn(r) : ''}
       ${STATE.tab === 'assumptions' ? renderAssumptions(r) : ''}
+      ${STATE.tab === 'documents' ? renderDocuments(r) : ''}
       ${STATE.tab === 'pricing' ? renderPricing() : ''}
     </div>
   `;
@@ -1733,16 +1851,44 @@ function renderReturn(r) {
         </div>
 
         ${sectionHeader('Form 1040 — Income', 'Lines 1–9')}
-        ${r.totalWages > 0 ? lineItem('1a. Wages, salaries, tips', r.totalWages, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''}) : ''}
-        ${r.totalInterest > 0 ? lineItem('2b. Taxable interest', r.totalInterest) : ''}
-        ${r.totalOrdDiv > 0 ? lineItem('3a. Ordinary dividends', r.totalOrdDiv) : ''}
+        ${r.totalWages > 0 ? (() => {
+          let wageHtml = lineItem('1a. Wages, salaries, tips', r.totalWages, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''});
+          if (r.w2s.length > 1) {
+            r.w2s.forEach((w, i) => {
+              wageHtml += lineItem('   ' + (w.employer || 'Employer ' + (i+1)), w.wages, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
+            });
+          }
+          return wageHtml;
+        })() : ''}
+        ${r.totalInterest > 0 ? (() => {
+          let intHtml = lineItem('2b. Taxable interest', r.totalInterest, {onClick: r.interest.some(i=>i._sourceURL) ? 'showInterestSource(0)' : ''});
+          if (r.interest.length > 1) {
+            r.interest.forEach((item, i) => {
+              intHtml += lineItem('   ' + item.payer, item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+i+')' : ''});
+            });
+          }
+          return intHtml;
+        })() : ''}
+        ${r.totalOrdDiv > 0 ? (() => {
+          let divHtml = lineItem('3a. Ordinary dividends', r.totalOrdDiv, {onClick: r.dividends.some(d=>d._sourceURL) ? 'showDividendSource(0)' : ''});
+          if (r.dividends.length > 1) {
+            r.dividends.forEach((item, i) => {
+              divHtml += lineItem('   ' + item.payer, item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+i+')' : ''});
+            });
+          }
+          return divHtml;
+        })() : ''}
         ${r.totalQualDiv > 0 ? lineItem('3b. Qualified dividends', r.totalQualDiv, {sub:true}) : ''}
-        ${r.schedCNet !== 0 ? lineItem('8. Business income (Schedule C)', r.schedCNet) : ''}
-        ${(r.netSTCG + r.netLTCG) !== 0 ? lineItem('7. Capital gain/loss (Schedule D)', r.netSTCG + r.netLTCG, {showSign:true}) : ''}
+        ${r.schedCNet !== 0 ? lineItem('8. Business income (Schedule C)', r.schedCNet, {onClick: r._necSources.length > 0 ? 'showNECSource()' : ''}) : ''}
+        ${(r.netSTCG + r.netLTCG) !== 0 ? lineItem('7. Capital gain/loss (Schedule D)', r.netSTCG + r.netLTCG, {showSign:true, onClick: r.schedules.form8949 && r.schedules.form8949.some(t=>t._sourceURL) ? 'showCapGainSource(0)' : ''}) : ''}
         ${lineItem('9. Total income', r.totalIncome, {bold:true})}
 
         ${sectionHeader('Adjustments to Income', 'Line 10')}
-        ${r.adjustments > 0 ? lineItem('Deductible SE tax (½)', r.adjustments, {indent:true}) : lineItem('No adjustments', 0, {sub:true})}
+        ${r.schedules['1'].seDeduction > 0 ? lineItem('Deductible SE tax (½)', r.schedules['1'].seDeduction, {indent:true, sub:true}) : ''}
+        ${r.schedules['1'].hsaDed > 0 ? lineItem('HSA deduction', r.schedules['1'].hsaDed, {indent:true, sub:true}) : ''}
+        ${r.schedules['1'].iraDed > 0 ? lineItem('IRA deduction', r.schedules['1'].iraDed, {indent:true, sub:true}) : ''}
+        ${r.schedules['1'].studentLoanDed > 0 ? lineItem('Student loan interest', r.schedules['1'].studentLoanDed, {indent:true, sub:true}) : ''}
+        ${r.adjustments === 0 ? lineItem('No adjustments', 0, {sub:true}) : ''}
         ${lineItem('10. Adjustments', r.adjustments, {bold:true})}
 
         ${sectionHeader('Adjusted Gross Income', 'Line 11')}
@@ -1757,14 +1903,31 @@ function renderReturn(r) {
         ${lineItem('Ordinary income tax', r.ordinaryTax, {indent:true, sub:true})}
         ${r.ltcgTax > 0 ? lineItem('LTCG / qualified dividend tax', r.ltcgTax, {indent:true, sub:true}) : ''}
         ${lineItem('16. Tax', r.incomeTax)}
+        ${r.schedules['3'].totalCredits > 0 ? (() => {
+          let credHtml = '';
+          if (r.schedules['3'].childTaxCredit > 0) credHtml += lineItem('Child tax credit', -r.schedules['3'].childTaxCredit, {indent:true, sub:true});
+          if (r.schedules['3'].otherDepCredit > 0) credHtml += lineItem('Other dependent credit', -r.schedules['3'].otherDepCredit, {indent:true, sub:true});
+          if (r.schedules['3'].educationCredit > 0) credHtml += lineItem('Education credit', -r.schedules['3'].educationCredit, {indent:true, sub:true});
+          credHtml += lineItem('21. Credits', r.schedules['3'].totalNonrefundableCredits, {sub:true});
+          return credHtml;
+        })() : ''}
         ${r.seTax > 0 ? lineItem('23. Self-employment tax (Schedule SE)', r.seTax) : ''}
         ${r.niit > 0 ? lineItem('Net investment income tax (3.8%)', r.niit) : ''}
         ${lineItem('24. Total tax', r.totalTax, {bold:true})}
 
         ${sectionHeader('Payments', 'Lines 25–33')}
-        ${r.totalFedWithheld > 0 ? lineItem('25d. Federal tax withheld', r.totalFedWithheld, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''}) : ''}
+        ${r.totalFedWithheld > 0 ? (() => {
+          let payHtml = lineItem('25d. Federal tax withheld', r.totalFedWithheld, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''});
+          if (r.w2s.length > 1) {
+            r.w2s.forEach((w, i) => {
+              payHtml += lineItem('   ' + (w.employer || 'Employer ' + (i+1)), w.fedWithheld, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
+            });
+          }
+          return payHtml;
+        })() : ''}
         ${r.estimatedPayments > 0 ? lineItem('26. Estimated tax payments', r.estimatedPayments) : ''}
-        ${lineItem('33. Total payments', r.totalPayments, {bold:true})}
+        ${r.schedules['3'].eitcCredit > 0 ? lineItem('27. Earned income credit (EITC)', r.schedules['3'].eitcCredit) : ''}
+        ${lineItem('33. Total payments & credits', r.totalPayments, {bold:true})}
 
         ${sectionHeader(r.refundOrOwed >= 0 ? 'Refund' : 'Amount You Owe', r.refundOrOwed >= 0 ? 'Line 34' : 'Line 37')}
         <div class="refund-box ${r.refundOrOwed >= 0 ? 'refund' : 'owed'}">
@@ -1772,6 +1935,43 @@ function renderReturn(r) {
           <div class="amount" style="color:${r.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div>
           <div class="rates">Marginal rate: ${r.marginalRate}% · Effective rate: ${r.effectiveRate.toFixed(1)}%</div>
         </div>
+  `;
+
+  // Tax Bracket Visualization
+  html += `
+    ${sectionHeader('Tax Bracket Breakdown', 'How your income is taxed')}
+    <div style="margin-bottom:16px">
+  `;
+  const brackets = TAX.brackets[r.filingStatus];
+  let prevLimit = 0;
+  const totalTaxable = r.taxableIncome;
+  const ordIncome = Math.max(0, totalTaxable - Math.max(0, r.netLTCG) - r.totalQualDiv);
+  for (let i = 0; i < brackets.length && prevLimit < ordIncome; i++) {
+    const [limit, rate] = brackets[i];
+    const bracketSize = Math.min(ordIncome, limit) - prevLimit;
+    if (bracketSize <= 0) { prevLimit = limit; continue; }
+    const pctOfIncome = totalTaxable > 0 ? (bracketSize / totalTaxable * 100) : 0;
+    const taxInBracket = Math.round(bracketSize * rate);
+    const colors = ['#22c55e','#4ade80','#86efac','#fbbf24','#f97316','#ef4444','#dc2626'];
+    const color = colors[Math.min(i, colors.length - 1)];
+    html += `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px">
+        <div style="width:50px;text-align:right;color:var(--text-muted);flex-shrink:0">${(rate*100).toFixed(0)}%</div>
+        <div style="flex:1;height:20px;background:var(--surface);border-radius:4px;overflow:hidden;position:relative">
+          <div style="height:100%;width:${Math.max(pctOfIncome, 2)}%;background:${color};border-radius:4px;transition:width 0.5s"></div>
+        </div>
+        <div style="width:90px;text-align:right;color:var(--text-dim);flex-shrink:0">$${fmt(bracketSize)}</div>
+        <div style="width:70px;text-align:right;color:${color};font-weight:600;flex-shrink:0">$${fmt(taxInBracket)}</div>
+      </div>
+    `;
+    prevLimit = limit;
+  }
+  html += `
+      <div style="display:flex;justify-content:flex-end;gap:8px;font-size:11px;color:var(--text-dim);margin-top:8px;padding-right:0">
+        <span>Income in bracket</span>
+        <span style="width:70px;text-align:right">Tax</span>
+      </div>
+    </div>
   `;
 
   // Schedule A
@@ -1784,7 +1984,7 @@ function renderReturn(r) {
       html += lineItem('Medical deduction', a.medicalDeduction, {indent:true});
     }
     html += lineItem(`SALT (capped at $${TAX.saltCap[r.filingStatus].toLocaleString()})`, a.saltDeduction, {indent:true});
-    if (a.mortgageInterest > 0) html += lineItem('Mortgage interest', a.mortgageInterest, {indent:true});
+    if (a.mortgageInterest > 0) html += lineItem('Mortgage interest', a.mortgageInterest, {indent:true, onClick: r._mortgageSources && r._mortgageSources.length > 0 ? 'showMortgageSource()' : ''});
     if (a.charitableCash > 0) html += lineItem('Charitable (cash)', a.charitableCash, {indent:true});
     if (a.charitableNonCash > 0) html += lineItem('Charitable (non-cash)', a.charitableNonCash, {indent:true});
     html += lineItem('Total Itemized Deductions', a.totalItemized, {bold:true});
@@ -1794,9 +1994,9 @@ function renderReturn(r) {
   if (r.schedules.B) {
     const b = r.schedules.B;
     html += sectionHeader('Schedule B — Interest and Dividends', 'Form 1040, Schedule B');
-    b.interestItems.forEach(i => { html += lineItem('  ' + i.payer, i.amount, {sub:true}); });
+    b.interestItems.forEach((item, idx) => { html += lineItem('  ' + item.payer, item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+idx+')' : ''}); });
     html += lineItem('Total interest', b.totalInterest, {indent:true});
-    b.dividendItems.forEach(d => { html += lineItem('  ' + d.payer, d.ordinary, {sub:true}); });
+    b.dividendItems.forEach((item, idx) => { html += lineItem('  ' + item.payer, item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+idx+')' : ''}); });
     html += lineItem('Total ordinary dividends', b.totalOrdDiv, {indent:true});
   }
 
@@ -1842,10 +2042,11 @@ function renderReturn(r) {
       <th>Description</th><th>Acquired</th><th>Sold</th>
       <th class="right">Proceeds</th><th class="right">Basis</th><th class="right">Gain/Loss</th><th class="center">Term</th>
     </tr></thead><tbody>`;
-    r.schedules.form8949.forEach(t => {
+    r.schedules.form8949.forEach((t, idx) => {
       const gl = (t.proceeds||0) - (t.basis||0);
-      html += `<tr>
-        <td>${t.description}</td><td class="muted">${t.dateAcquired}</td><td class="muted">${t.dateSold}</td>
+      const rowClick = t._sourceURL ? ` style="cursor:pointer" onclick="showCapGainSource(${idx})" title="Click to view source document"` : '';
+      html += `<tr${rowClick}>
+        <td>${t.description}${t._sourceURL ? ' <span style="color:var(--accent-light);font-size:10px">&#8599;</span>' : ''}</td><td class="muted">${t.dateAcquired}</td><td class="muted">${t.dateSold}</td>
         <td class="right">$${fmt(t.proceeds)}</td><td class="right">$${fmt(t.basis)}</td>
         <td class="right">${moneyHtml(gl, true)}</td>
         <td class="center">${t.longTerm ? 'LT' : 'ST'}</td>
@@ -1865,7 +2066,7 @@ function renderReturn(r) {
           with the IRS or any state tax authority. If you choose to transcribe data onto official forms, you do so
           at your own risk. Always consult a qualified tax professional before filing. By using this tool, you
           acknowledge the operators bear no responsibility for errors or resulting tax liabilities.
-          <div class="version">Tax Year ${TAX.year} · Generated ${new Date().toLocaleDateString()} · v0.3.0-draft</div>
+          <div class="version">Tax Year ${TAX.year} · Generated ${new Date().toLocaleDateString()} · ${APP_VERSION}</div>
           <div style="margin-top:6px"><a href="${GITHUB_REPO}" target="_blank" rel="noopener" style="color:var(--accent-light);text-decoration:none;font-weight:600">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-1px;margin-right:3px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
             Open source — verify every line of code on GitHub
@@ -1878,70 +2079,198 @@ function renderReturn(r) {
 }
 
 function renderAssumptions(r) {
+  const unanswered = r.assumptions.filter(a => !STATE.answeredQs.has(a.id));
+  const answeredList = r.assumptions.filter(a => STATE.answeredQs.has(a.id));
+  const paidCount = [...STATE.answeredQs].length;
+
   let html = `
     <div style="margin-bottom:16px">
-      <h2 style="font-size:18px;font-weight:700">Assumptions Made</h2>
+      <h2 style="font-size:18px;font-weight:700">Assumptions & Questions</h2>
       <p style="color:var(--text-muted);font-size:13px;margin-top:4px">
-        These assumptions were inferred from your documents. Answer questions to refine your return.
-        The first 3 answers cost $5 each. Additional answers are free.
+        Your draft return made these assumptions. Refine them to get a more accurate estimate.
       </p>
+      ${paidCount > 0 ? `<div style="margin-top:8px;padding:8px 12px;background:rgba(34,197,94,0.08);border:1px solid var(--green-dark);border-radius:6px;font-size:12px;color:var(--green)">
+        &#x2713; ${paidCount} assumption${paidCount>1?'s':''} refined · Return recalculated
+      </div>` : ''}
     </div>
   `;
 
-  r.assumptions.forEach((a, i) => {
-    const answered = STATE.answeredQs.has(a.id);
-    const price = i < 3 ? 5 : 0;
-    html += `
-      <div class="assumption-card ${answered ? 'answered' : ''}">
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span class="impact-badge ${a.impact}">${a.impact} impact</span>
-            ${answered ? '<span class="answered-label">✓ Answered</span>' : ''}
+  if (unanswered.length > 0) {
+    html += `<div style="color:var(--text-dim);font-size:12px;margin-bottom:8px;font-weight:600">Needs your input (${unanswered.length})</div>`;
+    unanswered.forEach((a, i) => {
+      const canInteract = getAssumptionForm(a.id) !== null;
+      const globalIdx = r.assumptions.indexOf(a);
+      const price = globalIdx < 3 ? 5 : 0;
+      html += `
+        <div class="assumption-card">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span class="impact-badge ${a.impact}">${a.impact} impact</span>
+              ${canInteract ? '<span style="color:var(--accent-light);font-size:10px;font-weight:600">INTERACTIVE</span>' : ''}
+            </div>
+            <div class="assumption-text">${a.text}</div>
           </div>
-          <div class="assumption-text">${a.text}</div>
+          <button class="btn-answer" onclick="answerQuestion('${a.id}')">
+            ${canInteract ? (stripeInstance || price === 0 ? 'Refine' : 'Refine (free in beta)') : 'Acknowledge'}
+          </button>
         </div>
-        ${!answered ? `<button class="btn-answer" onclick="answerQuestion('${a.id}')">
-          ${price > 0 ? `Answer · $${price}` : 'Free'}
-        </button>` : ''}
-      </div>
-    `;
-  });
+      `;
+    });
+  }
+
+  if (answeredList.length > 0) {
+    html += `<div style="color:var(--text-dim);font-size:12px;margin:16px 0 8px;font-weight:600">Already refined (${answeredList.length})</div>`;
+    answeredList.forEach(a => {
+      html += `
+        <div class="assumption-card answered">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span class="impact-badge ${a.impact}">${a.impact} impact</span>
+              <span class="answered-label">&#x2713; Refined</span>
+            </div>
+            <div class="assumption-text">${a.text}</div>
+          </div>
+          <button class="btn-answer" style="background:var(--surface-light)" onclick="answerQuestion('${a.id}')">Edit</button>
+        </div>
+      `;
+    });
+  }
 
   return html;
 }
 
 function renderPricing() {
+  const stripeReady = stripeInstance !== null;
+  const answered = STATE.answeredQs.size;
+
   return `
-    <h2 style="font-size:18px;font-weight:700">Pricing</h2>
-    <p style="color:var(--text-muted);font-size:13px;margin-top:4px">
-      Transparent, pay-as-you-go. Only pay for what changes your return.
+    <h2 style="font-size:18px;font-weight:700">How It Works</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:4px;margin-bottom:20px">
+      Get a free draft return, then refine it by answering questions about your specific situation.
     </p>
-    <div class="pricing-grid">
-      <div class="pricing-card">
-        <div class="price" style="color:var(--text)">Free</div>
-        <div class="plan">Draft Preview</div>
-        <div class="features">
-          Upload documents<br>Full draft 1040 + all schedules<br>
-          See all assumptions made<br>Compare with your CPA's quote
+
+    <!-- Value Proposition -->
+    <div style="background:linear-gradient(135deg,rgba(59,130,246,0.08),rgba(34,197,94,0.08));border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center">
+        <div>
+          <div style="font-size:28px;font-weight:800;color:var(--green)">Free</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Draft return with all schedules</div>
         </div>
-      </div>
-      <div class="pricing-card featured">
-        <div class="price" style="color:var(--accent-light)">$5</div>
-        <div class="plan">Per Question (first 3)</div>
-        <div class="features">
-          Refine assumptions<br>Get more accurate return<br>
-          Impact shown before paying<br>Max $15 for first 3 questions
+        <div>
+          <div style="font-size:28px;font-weight:800;color:var(--accent-light)">$5</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Per question to refine (max 3)</div>
         </div>
-      </div>
-      <div class="pricing-card green">
-        <div class="price" style="color:var(--green)">Free</div>
-        <div class="plan">Additional Questions</div>
-        <div class="features">
-          4th question onward<br>Keep refining<br>
-          No additional cost<br>Unlimited refinements
+        <div>
+          <div style="font-size:28px;font-weight:800;color:var(--text)">$15</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Maximum total cost</div>
         </div>
       </div>
     </div>
+
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div style="color:var(--green);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 1</div>
+        <div class="price" style="color:var(--text)">Free</div>
+        <div class="plan">Draft Preview</div>
+        <div class="features" style="text-align:left;padding:0 8px">
+          &#x2713; Upload W-2s, 1099s, 1098s<br>
+          &#x2713; Full Form 1040 draft<br>
+          &#x2713; All schedules (A, B, C, D, SE)<br>
+          &#x2713; Form 8949 capital gains<br>
+          &#x2713; See estimated refund/owed<br>
+          &#x2713; View all assumptions made
+        </div>
+      </div>
+      <div class="pricing-card featured">
+        <div style="color:var(--accent-light);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 2</div>
+        <div class="price" style="color:var(--accent-light)">$5<span style="font-size:14px;color:var(--text-dim)">/ea</span></div>
+        <div class="plan">Refine Your Return</div>
+        <div class="features" style="text-align:left;padding:0 8px">
+          &#x2713; Change filing status<br>
+          &#x2713; Add dependents & credits<br>
+          &#x2713; Enter HSA/IRA deductions<br>
+          &#x2713; Add business expenses<br>
+          &#x2713; Itemize deductions<br>
+          &#x2713; See instant tax impact
+        </div>
+        ${!stripeReady ? '<div style="margin-top:12px;padding:8px;background:rgba(234,179,8,0.1);border:1px solid var(--yellow);border-radius:6px;font-size:11px;color:var(--yellow)">Payment coming soon — questions are free during beta</div>' : ''}
+      </div>
+      <div class="pricing-card green">
+        <div style="color:var(--green);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 3</div>
+        <div class="price" style="color:var(--green)">Free</div>
+        <div class="plan">Keep Refining</div>
+        <div class="features" style="text-align:left;padding:0 8px">
+          &#x2713; 4th question onward is free<br>
+          &#x2713; Unlimited recalculations<br>
+          &#x2713; Compare scenarios<br>
+          &#x2713; No subscription<br>
+          &#x2713; No account needed<br>
+          &#x2713; Nothing stored anywhere
+        </div>
+      </div>
+    </div>
+
+    <!-- Compare with alternatives -->
+    <div style="margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">Compare with Alternatives</h3>
+      <div style="overflow-x:auto">
+        <table style="width:100%;font-size:13px">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:8px;color:var(--text-dim);font-weight:600">Feature</th>
+              <th style="text-align:center;padding:8px;color:var(--accent-light);font-weight:700">ReviewMyTaxes</th>
+              <th style="text-align:center;padding:8px;color:var(--text-dim);font-weight:600">TurboTax</th>
+              <th style="text-align:center;padding:8px;color:var(--text-dim);font-weight:600">CPA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--surface-light)">
+              <td style="padding:8px;color:var(--text-muted)">Price</td>
+              <td style="text-align:center;padding:8px;color:var(--green);font-weight:600">$0–$15</td>
+              <td style="text-align:center;padding:8px;color:var(--text-muted)">$0–$129+</td>
+              <td style="text-align:center;padding:8px;color:var(--text-muted)">$200–$500+</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--surface-light)">
+              <td style="padding:8px;color:var(--text-muted)">Privacy</td>
+              <td style="text-align:center;padding:8px;color:var(--green)">100% local</td>
+              <td style="text-align:center;padding:8px;color:var(--text-muted)">Cloud</td>
+              <td style="text-align:center;padding:8px;color:var(--text-muted)">Shared</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--surface-light)">
+              <td style="padding:8px;color:var(--text-muted)">Speed</td>
+              <td style="text-align:center;padding:8px;color:var(--green)">Instant</td>
+              <td style="text-align:center;padding:8px;color:var(--text-muted)">Hours</td>
+              <td style="text-align:center;padding:8px;color:var(--text-muted)">Days/Weeks</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--surface-light)">
+              <td style="padding:8px;color:var(--text-muted)">Can file return?</td>
+              <td style="text-align:center;padding:8px;color:var(--orange)">No (preview only)</td>
+              <td style="text-align:center;padding:8px;color:var(--green)">Yes</td>
+              <td style="text-align:center;padding:8px;color:var(--green)">Yes</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;color:var(--text-muted)">Open source?</td>
+              <td style="text-align:center;padding:8px;color:var(--green)">Yes</td>
+              <td style="text-align:center;padding:8px;color:var(--text-dim)">No</td>
+              <td style="text-align:center;padding:8px;color:var(--text-dim)">N/A</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--text-dim);text-align:center">
+        Use ReviewMyTaxes to preview your return, then decide if you need TurboTax or a CPA for filing.
+      </div>
+    </div>
+
+    ${answered > 0 ? `
+    <div style="margin-top:20px;background:rgba(34,197,94,0.08);border:1px solid var(--green-dark);border-radius:8px;padding:16px;text-align:center">
+      <div style="font-size:14px;font-weight:600;color:var(--green)">You've refined ${answered} assumption${answered > 1 ? 's' : ''}</div>
+      <div style="color:var(--text-muted);font-size:12px;margin-top:4px">
+        ${answered <= 3 ? `Cost: $${Math.min(answered, 3) * 5} (${3 - answered} paid question${3 - answered !== 1 ? 's' : ''} remaining)` : `Cost: $15 (all additional questions are free)`}
+      </div>
+    </div>
+    ` : ''}
+
     <div style="margin-top:24px;background:var(--draft-bg);border:1px solid var(--red);border-radius:8px;padding:16px;font-size:12px;color:var(--text-muted);line-height:1.6">
       <strong style="color:var(--red)">Disclaimer:</strong> This tool produces draft estimates for comparison
       and informational purposes only. It is not a substitute for professional tax preparation. The operators are
@@ -1949,6 +2278,127 @@ function renderPricing() {
       Consult a licensed CPA or enrolled agent for official tax filing.
     </div>
   `;
+}
+
+function renderDocuments(r) {
+  let html = `
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:4px">Uploaded Documents</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">
+      Click any document to view the original. All documents are stored in your browser memory only.
+    </p>
+  `;
+
+  // W-2s
+  if (r.w2s && r.w2s.length > 0) {
+    html += `<div style="color:var(--accent-light);font-size:13px;font-weight:700;margin:12px 0 8px">W-2 Wage and Tax Statements</div>`;
+    r.w2s.forEach((w, i) => {
+      html += `
+        <div class="assumption-card" style="cursor:${w._sourceURL ? 'pointer' : 'default'}" ${w._sourceURL ? `onclick="showSourceDoc(${i})"` : ''}>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600">${w.employer || 'Unknown Employer'}</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">
+              Wages: $${fmt(w.wages)} · Fed withheld: $${fmt(w.fedWithheld)} · State withheld: $${fmt(w.stateWithheld)}
+            </div>
+            ${w._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${w._sourceFileName}</div>` : ''}
+          </div>
+          ${w._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
+        </div>
+      `;
+    });
+  }
+
+  // Interest
+  if (r.interest && r.interest.length > 0) {
+    html += `<div style="color:var(--accent-light);font-size:13px;font-weight:700;margin:16px 0 8px">1099-INT Interest Income</div>`;
+    r.interest.forEach((item, i) => {
+      html += `
+        <div class="assumption-card" style="cursor:${item._sourceURL ? 'pointer' : 'default'}" ${item._sourceURL ? `onclick="showInterestSource(${i})"` : ''}>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600">${item.payer}</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Interest: $${fmt(item.amount)}</div>
+          </div>
+          ${item._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
+        </div>
+      `;
+    });
+  }
+
+  // Dividends
+  if (r.dividends && r.dividends.length > 0) {
+    html += `<div style="color:var(--accent-light);font-size:13px;font-weight:700;margin:16px 0 8px">1099-DIV Dividends</div>`;
+    r.dividends.forEach((item, i) => {
+      html += `
+        <div class="assumption-card" style="cursor:${item._sourceURL ? 'pointer' : 'default'}" ${item._sourceURL ? `onclick="showDividendSource(${i})"` : ''}>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600">${item.payer}</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Ordinary: $${fmt(item.ordinary)} · Qualified: $${fmt(item.qualified)}</div>
+          </div>
+          ${item._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
+        </div>
+      `;
+    });
+  }
+
+  // Capital Gains
+  if (r.schedules.form8949 && r.schedules.form8949.length > 0) {
+    html += `<div style="color:var(--accent-light);font-size:13px;font-weight:700;margin:16px 0 8px">1099-B Capital Gains</div>`;
+    r.schedules.form8949.forEach((t, i) => {
+      const gl = (t.proceeds||0) - (t.basis||0);
+      html += `
+        <div class="assumption-card" style="cursor:${t._sourceURL ? 'pointer' : 'default'}" ${t._sourceURL ? `onclick="showCapGainSource(${i})"` : ''}>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600">${t.description}</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">
+              Proceeds: $${fmt(t.proceeds)} · Basis: $${fmt(t.basis)} · ${gl >= 0 ? 'Gain' : 'Loss'}: ${moneyHtml(gl, true)} · ${t.longTerm ? 'Long-term' : 'Short-term'}
+            </div>
+          </div>
+          ${t._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
+        </div>
+      `;
+    });
+  }
+
+  // Schedule C / 1099-NEC
+  if (r._necSources && r._necSources.length > 0) {
+    html += `<div style="color:var(--accent-light);font-size:13px;font-weight:700;margin:16px 0 8px">1099-NEC Self-Employment</div>`;
+    r._necSources.forEach(src => {
+      html += `
+        <div class="assumption-card" style="cursor:pointer" onclick="showNECSource()">
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600">Nonemployee Compensation</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Amount: $${fmt(src.amount)}</div>
+            ${src._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${src._sourceFileName}</div>` : ''}
+          </div>
+          <div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>
+        </div>
+      `;
+    });
+  }
+
+  // 1098 Mortgage
+  if (r._mortgageSources && r._mortgageSources.length > 0) {
+    html += `<div style="color:var(--accent-light);font-size:13px;font-weight:700;margin:16px 0 8px">1098 Mortgage Interest</div>`;
+    r._mortgageSources.forEach(src => {
+      html += `
+        <div class="assumption-card" style="cursor:pointer" onclick="showMortgageSource()">
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600">Mortgage Interest Statement</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">
+              Interest: $${fmt(src.mortgageInterest)}${src.propertyTax > 0 ? ` · Property tax: $${fmt(src.propertyTax)}` : ''}
+            </div>
+            ${src._sourceFileName ? `<div style="color:var(--text-dim);font-size:11px;margin-top:2px">${src._sourceFileName}</div>` : ''}
+          </div>
+          <div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>
+        </div>
+      `;
+    });
+  }
+
+  if (!r.w2s.length && !r.interest.length && !r.dividends.length) {
+    html += `<div style="text-align:center;color:var(--text-dim);padding:32px;font-size:14px">No source documents — using demo data</div>`;
+  }
+
+  return html;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2040,8 +2490,16 @@ function loadDemo(key) {
 
 function goBack() {
   // Revoke object URLs to free memory
-  if (STATE.result && STATE.result.w2s) {
-    STATE.result.w2s.forEach(w => { if (w._sourceURL) URL.revokeObjectURL(w._sourceURL); });
+  if (STATE.result) {
+    const r = STATE.result;
+    (r.w2s||[]).forEach(w => { if (w._sourceURL) URL.revokeObjectURL(w._sourceURL); });
+    (r.interest||[]).forEach(i => { if (i._sourceURL) URL.revokeObjectURL(i._sourceURL); });
+    (r.dividends||[]).forEach(d => { if (d._sourceURL) URL.revokeObjectURL(d._sourceURL); });
+    (r._necSources||[]).forEach(s => { if (s._sourceURL) URL.revokeObjectURL(s._sourceURL); });
+    (r._mortgageSources||[]).forEach(s => { if (s._sourceURL) URL.revokeObjectURL(s._sourceURL); });
+    if (r.schedules && r.schedules.form8949) {
+      r.schedules.form8949.forEach(t => { if (t._sourceURL) URL.revokeObjectURL(t._sourceURL); });
+    }
   }
   STATE.screen = 'upload';
   STATE.files = [];
@@ -2056,8 +2514,298 @@ function setTab(t) {
 }
 
 function answerQuestion(id) {
+  // Show an interactive form based on the assumption type
+  const formHtml = getAssumptionForm(id);
+  if (formHtml) {
+    showAssumptionModal(id, formHtml);
+  } else {
+    STATE.answeredQs.add(id);
+    render();
+  }
+}
+
+function getAssumptionForm(id) {
+  const r = STATE.result;
+  switch(id) {
+    case 'filing_status':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Select your filing status:</label>
+          <select id="modal-filing-status" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+            ${Object.entries(FS_LABELS).map(([k,v]) => `<option value="${k}" ${STATE.taxData.filingStatus === k ? 'selected' : ''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5;margin-bottom:16px">
+          <strong>Single:</strong> Unmarried or legally separated<br>
+          <strong>MFJ:</strong> Married and filing together (usually best)<br>
+          <strong>MFS:</strong> Married but filing separate returns<br>
+          <strong>HOH:</strong> Unmarried with a qualifying dependent
+        </div>
+      `;
+    case 'dependents':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Number of qualifying children (under 17):</label>
+          <input type="number" id="modal-children" min="0" max="10" value="${STATE.taxData.numChildren || 0}" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Number of other dependents:</label>
+          <input type="number" id="modal-other-deps" min="0" max="10" value="${STATE.taxData.numOtherDeps || 0}" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>Child Tax Credit:</strong> $2,000 per qualifying child under 17<br>
+          <strong>Other Dependent Credit:</strong> $500 per other dependent
+        </div>
+      `;
+    case 'no_credits':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Education credits (American Opportunity / Lifetime Learning):</label>
+          <input type="number" id="modal-edu-credit" min="0" step="100" value="${STATE.taxData.educationCredit || 0}" placeholder="0" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Earned Income Tax Credit (EITC):</label>
+          <input type="number" id="modal-eitc" min="0" step="100" value="${STATE.taxData.eitc || 0}" placeholder="0" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>AOTC:</strong> Up to $2,500/student for first 4 years of college<br>
+          <strong>LLC:</strong> Up to $2,000 for any higher education<br>
+          <strong>EITC:</strong> Refundable credit for low-to-moderate income
+        </div>
+      `;
+    case 'no_hsa':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">HSA contributions (above-the-line deduction):</label>
+          <input type="number" id="modal-hsa" min="0" step="100" value="${STATE.taxData.hsaContribution || 0}" placeholder="0" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Traditional IRA contributions (deductible):</label>
+          <input type="number" id="modal-ira" min="0" step="100" value="${STATE.taxData.iraContribution || 0}" placeholder="0" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Student loan interest paid:</label>
+          <input type="number" id="modal-student-loan" min="0" step="100" value="${STATE.taxData.studentLoanInterest || 0}" placeholder="0" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          These reduce your AGI directly (above-the-line deductions). Limits apply.
+        </div>
+      `;
+    case 'std_deduction':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Would you rather itemize deductions?</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px">
+              <input type="radio" name="deduction-type" value="standard" checked> Standard ($${TAX.standardDeduction[STATE.taxData.filingStatus || 'single'].toLocaleString()})
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px">
+              <input type="radio" name="deduction-type" value="itemized"> Itemized
+            </label>
+          </div>
+          <div id="itemized-fields" style="display:none">
+            <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">Medical expenses:</label>
+            <input type="number" id="modal-medical" min="0" step="100" value="${(STATE.taxData.itemized||{}).medical || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;font-family:inherit">
+            <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">State/local taxes paid:</label>
+            <input type="number" id="modal-salt" min="0" step="100" value="${(STATE.taxData.itemized||{}).stateTaxes || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;font-family:inherit">
+            <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">Property taxes:</label>
+            <input type="number" id="modal-property" min="0" step="100" value="${(STATE.taxData.itemized||{}).propertyTaxes || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;font-family:inherit">
+            <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">Mortgage interest:</label>
+            <input type="number" id="modal-mortgage" min="0" step="100" value="${(STATE.taxData.itemized||{}).mortgageInterest || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;font-family:inherit">
+            <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">Charitable contributions (cash):</label>
+            <input type="number" id="modal-charity-cash" min="0" step="100" value="${(STATE.taxData.itemized||{}).charitableCash || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;font-family:inherit">
+            <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">Charitable contributions (non-cash):</label>
+            <input type="number" id="modal-charity-noncash" min="0" step="100" value="${(STATE.taxData.itemized||{}).charitableNonCash || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+          </div>
+        </div>
+      `;
+    case 'sched_c_expenses':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Enter your business expenses to reduce self-employment tax:</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Advertising</label>
+              <input type="number" id="modal-biz-advertising" min="0" value="${(STATE.taxData.scheduleC||{}).advertising || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Car/Vehicle</label>
+              <input type="number" id="modal-biz-car" min="0" value="${(STATE.taxData.scheduleC||{}).carExpense || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Insurance</label>
+              <input type="number" id="modal-biz-insurance" min="0" value="${(STATE.taxData.scheduleC||{}).insurance || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Office Expense</label>
+              <input type="number" id="modal-biz-office" min="0" value="${(STATE.taxData.scheduleC||{}).officeExpense || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Rent</label>
+              <input type="number" id="modal-biz-rent" min="0" value="${(STATE.taxData.scheduleC||{}).rent || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Supplies</label>
+              <input type="number" id="modal-biz-supplies" min="0" value="${(STATE.taxData.scheduleC||{}).supplies || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Travel</label>
+              <input type="number" id="modal-biz-travel" min="0" value="${(STATE.taxData.scheduleC||{}).travel || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Meals (50%)</label>
+              <input type="number" id="modal-biz-meals" min="0" value="${(STATE.taxData.scheduleC||{}).meals || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Utilities</label>
+              <input type="number" id="modal-biz-utilities" min="0" value="${(STATE.taxData.scheduleC||{}).utilities || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Other</label>
+              <input type="number" id="modal-biz-other" min="0" value="${(STATE.taxData.scheduleC||{}).otherExpenses || 0}" style="width:100%;padding:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit">
+            </div>
+          </div>
+        </div>
+      `;
+    default:
+      return null;
+  }
+}
+
+function showAssumptionModal(id, formHtml) {
+  const assumptionText = STATE.result.assumptions.find(a => a.id === id)?.text || '';
+  const overlay = document.createElement('div');
+  overlay.className = 'source-modal-overlay';
+  overlay.id = 'assumption-modal';
+  overlay.onclick = (e) => { if (e.target === overlay) closeAssumptionModal(); };
+  overlay.innerHTML = `
+    <div class="source-modal" style="height:auto;max-height:85vh;max-width:520px">
+      <div class="source-modal-header">
+        <div>
+          <div class="title">Refine Your Return</div>
+          <div class="filename">${assumptionText}</div>
+        </div>
+        <button class="close-btn" onclick="closeAssumptionModal()">Cancel</button>
+      </div>
+      <div class="source-modal-body" style="padding:20px;overflow-y:auto">
+        ${formHtml}
+        <div id="assumption-impact" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;display:none">
+          <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px">Impact on your return:</div>
+          <div id="assumption-impact-text" style="font-size:16px;font-weight:700"></div>
+        </div>
+        <button onclick="applyAssumptionChange('${id}')" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+          Apply & Recalculate
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Wire up itemized toggle if present
+  const radios = overlay.querySelectorAll('input[name="deduction-type"]');
+  radios.forEach(r => r.addEventListener('change', () => {
+    const fields = document.getElementById('itemized-fields');
+    if (fields) fields.style.display = r.value === 'itemized' && r.checked ? 'block' : 'none';
+  }));
+}
+
+function closeAssumptionModal() {
+  const el = document.getElementById('assumption-modal');
+  if (el) el.remove();
+}
+
+function applyAssumptionChange(id) {
+  const oldRefund = STATE.result.refundOrOwed;
+
+  switch(id) {
+    case 'filing_status': {
+      const val = document.getElementById('modal-filing-status')?.value;
+      if (val) STATE.taxData.filingStatus = val;
+      break;
+    }
+    case 'dependents': {
+      const children = parseInt(document.getElementById('modal-children')?.value) || 0;
+      const otherDeps = parseInt(document.getElementById('modal-other-deps')?.value) || 0;
+      STATE.taxData.numChildren = children;
+      STATE.taxData.numOtherDeps = otherDeps;
+      STATE.taxData.dependents = children + otherDeps;
+      break;
+    }
+    case 'no_credits': {
+      STATE.taxData.educationCredit = parseFloat(document.getElementById('modal-edu-credit')?.value) || 0;
+      STATE.taxData.eitc = parseFloat(document.getElementById('modal-eitc')?.value) || 0;
+      break;
+    }
+    case 'no_hsa': {
+      STATE.taxData.hsaContribution = parseFloat(document.getElementById('modal-hsa')?.value) || 0;
+      STATE.taxData.iraContribution = parseFloat(document.getElementById('modal-ira')?.value) || 0;
+      STATE.taxData.studentLoanInterest = parseFloat(document.getElementById('modal-student-loan')?.value) || 0;
+      break;
+    }
+    case 'std_deduction': {
+      const deductionType = document.querySelector('input[name="deduction-type"]:checked')?.value;
+      if (deductionType === 'itemized') {
+        STATE.taxData.itemized = {
+          medical: parseFloat(document.getElementById('modal-medical')?.value) || 0,
+          stateTaxes: parseFloat(document.getElementById('modal-salt')?.value) || 0,
+          propertyTaxes: parseFloat(document.getElementById('modal-property')?.value) || 0,
+          mortgageInterest: parseFloat(document.getElementById('modal-mortgage')?.value) || 0,
+          charitableCash: parseFloat(document.getElementById('modal-charity-cash')?.value) || 0,
+          charitableNonCash: parseFloat(document.getElementById('modal-charity-noncash')?.value) || 0,
+        };
+      } else {
+        delete STATE.taxData.itemized;
+      }
+      break;
+    }
+    case 'sched_c_expenses': {
+      if (STATE.taxData.scheduleC) {
+        STATE.taxData.scheduleC.advertising = parseFloat(document.getElementById('modal-biz-advertising')?.value) || 0;
+        STATE.taxData.scheduleC.carExpense = parseFloat(document.getElementById('modal-biz-car')?.value) || 0;
+        STATE.taxData.scheduleC.insurance = parseFloat(document.getElementById('modal-biz-insurance')?.value) || 0;
+        STATE.taxData.scheduleC.officeExpense = parseFloat(document.getElementById('modal-biz-office')?.value) || 0;
+        STATE.taxData.scheduleC.rent = parseFloat(document.getElementById('modal-biz-rent')?.value) || 0;
+        STATE.taxData.scheduleC.supplies = parseFloat(document.getElementById('modal-biz-supplies')?.value) || 0;
+        STATE.taxData.scheduleC.travel = parseFloat(document.getElementById('modal-biz-travel')?.value) || 0;
+        STATE.taxData.scheduleC.meals = parseFloat(document.getElementById('modal-biz-meals')?.value) || 0;
+        STATE.taxData.scheduleC.utilities = parseFloat(document.getElementById('modal-biz-utilities')?.value) || 0;
+        STATE.taxData.scheduleC.otherExpenses = parseFloat(document.getElementById('modal-biz-other')?.value) || 0;
+      }
+      break;
+    }
+  }
+
+  // Recalculate
+  STATE.result = computeTaxReturn(STATE.taxData);
   STATE.answeredQs.add(id);
+  closeAssumptionModal();
+  STATE.tab = 'return';
   render();
+
+  // Show impact toast
+  const newRefund = STATE.result.refundOrOwed;
+  const diff = newRefund - oldRefund;
+  if (diff !== 0) {
+    showImpactToast(diff);
+  }
+}
+
+function showImpactToast(diff) {
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:700;animation:fadeIn 0.3s ease;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+  if (diff > 0) {
+    toast.style.background = 'rgba(34,197,94,0.15)';
+    toast.style.border = '1px solid var(--green)';
+    toast.style.color = 'var(--green)';
+    toast.textContent = `Refund increased by $${fmt(diff)}`;
+  } else {
+    toast.style.background = 'rgba(239,68,68,0.15)';
+    toast.style.border = '1px solid var(--red)';
+    toast.style.color = 'var(--red)';
+    toast.textContent = `Refund decreased by $${fmt(Math.abs(diff))}`;
+  }
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.5s'; setTimeout(() => toast.remove(), 500); }, 3000);
 }
 
 function showVerifyPanel() {
