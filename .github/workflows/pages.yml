@@ -30,7 +30,9 @@ jobs:
           for f in index.html schedules.html; do
             [ -f "$f" ] && sed -i "s|<head>|<head><meta name=\"build\" content=\"${BUILD_NUM}\">|" "$f"
           done
-          sed -i "s|'dev'|'${BUILD_NUM}'|" js/shared-state.js
+          sed -i "s|BUILD_TOKEN|${BUILD_NUM}|" js/shared-state.js
+          echo "Verify injection:"
+          grep APP_BUILD js/shared-state.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
