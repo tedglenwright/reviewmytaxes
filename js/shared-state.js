@@ -164,3 +164,73 @@ function loadAnswered() {
     if (stored) STATE.answeredQs = new Set(JSON.parse(stored));
   } catch(e) {}
 }
+
+// ═══════════════════════════════════════════════════════════════
+// CROSS-TAB SYNCHRONIZATION
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('storage', (e) => {
+  if (e.key === 'rmt_payment') {
+    try {
+      const stored = JSON.parse(e.newValue || '{}');
+      PAID_QUESTIONS = Math.max(0, (stored.paidQuestions || 0) - (stored.usedQuestions || 0));
+      rlog('CROSS_TAB_SYNC', { key: 'payment', credits: PAID_QUESTIONS });
+    } catch(err) {}
+  }
+  if (e.key === 'rmt_taxData' && e.newValue) {
+    try {
+      STATE.taxData = JSON.parse(e.newValue);
+      rlog('CROSS_TAB_SYNC', { key: 'taxData' });
+      if (typeof render === 'function') render();
+    } catch(err) {}
+  }
+  if (e.key === 'rmt_answered' && e.newValue) {
+    try {
+      STATE.answeredQs = new Set(JSON.parse(e.newValue));
+      rlog('CROSS_TAB_SYNC', { key: 'answered' });
+    } catch(err) {}
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// THEME TOGGLE (dark/light mode)
+// ═══════════════════════════════════════════════════════════════
+const THEME_KEY = 'rmt_theme';
+function getTheme() { return localStorage.getItem(THEME_KEY) || 'dark'; }
+function setTheme(theme) {
+  localStorage.setItem(THEME_KEY, theme);
+  applyTheme(theme);
+  rlog('THEME_CHANGE', theme);
+}
+function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'light') {
+    root.style.setProperty('--bg', '#f0f4f8');
+    root.style.setProperty('--surface', '#ffffff');
+    root.style.setProperty('--surface-light', '#e2e8f0');
+    root.style.setProperty('--border', '#cbd5e1');
+    root.style.setProperty('--text', '#1e293b');
+    root.style.setProperty('--text-muted', '#475569');
+    root.style.setProperty('--text-dim', '#64748b');
+    root.style.setProperty('--glass-bg', 'rgba(255,255,255,0.7)');
+    root.style.setProperty('--glass-border', 'rgba(203,213,225,0.5)');
+    root.style.setProperty('--draft-bg', 'rgba(239,68,68,0.06)');
+    document.body.classList.add('light-theme');
+    document.body.classList.remove('dark-theme');
+  } else {
+    root.style.removeProperty('--bg');
+    root.style.removeProperty('--surface');
+    root.style.removeProperty('--surface-light');
+    root.style.removeProperty('--border');
+    root.style.removeProperty('--text');
+    root.style.removeProperty('--text-muted');
+    root.style.removeProperty('--text-dim');
+    root.style.removeProperty('--glass-bg');
+    root.style.removeProperty('--glass-border');
+    root.style.removeProperty('--draft-bg');
+    document.body.classList.add('dark-theme');
+    document.body.classList.remove('light-theme');
+  }
+}
+// Apply saved theme on load
+applyTheme(getTheme());
