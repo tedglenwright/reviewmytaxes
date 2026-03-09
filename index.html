@@ -1192,6 +1192,50 @@ function renderReturn(r) {
     }
   }
 
+  // Key Tax Dates
+  const taxYear = TAX.year;
+  const filingYear = taxYear + 1;
+  const now = new Date();
+  const keyDates = [
+    { date: new Date(filingYear, 0, 31), label: 'W-2s and 1099s due from employers/payers' },
+    { date: new Date(filingYear, 2, 15), label: 'Deadline for Schedule K-1 from partnerships' },
+    { date: new Date(filingYear, 3, 15), label: `Tax filing deadline (${taxYear} return)`, highlight: true },
+  ];
+  if (r.seTax > 0 || r.refundOrOwed < -500) {
+    keyDates.push({ date: new Date(filingYear, 3, 15), label: `Q1 estimated tax payment due (${filingYear})` });
+    keyDates.push({ date: new Date(filingYear, 5, 16), label: `Q2 estimated tax payment due` });
+    keyDates.push({ date: new Date(filingYear, 8, 15), label: `Q3 estimated tax payment due` });
+    keyDates.push({ date: new Date(filingYear + 1, 0, 15), label: `Q4 estimated tax payment due` });
+  }
+  if (STATE.taxData.iraContribution || r.agi < 150000) {
+    keyDates.push({ date: new Date(filingYear, 3, 15), label: `IRA contribution deadline for ${taxYear}` });
+  }
+  keyDates.push({ date: new Date(filingYear, 9, 15), label: 'Extended filing deadline (if extension filed)' });
+  keyDates.sort((a, b) => a.date - b.date);
+
+  // Deduplicate dates with same date
+  const seenDates = new Set();
+  const uniqueDates = keyDates.filter(d => {
+    const key = d.date.toISOString().slice(0, 10) + d.label;
+    if (seenDates.has(key)) return false;
+    seenDates.add(key);
+    return true;
+  });
+
+  html += sectionHeader('Key Tax Dates', `${taxYear} Filing Season`);
+  html += '<div style="margin-bottom:16px">';
+  uniqueDates.forEach(d => {
+    const isPast = d.date < now;
+    const isUpcoming = !isPast && (d.date - now) < 30 * 24 * 60 * 60 * 1000;
+    const dateStr = d.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    html += `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px;${isPast ? 'opacity:0.5' : ''}">
+      <div style="width:10px;height:10px;border-radius:50%;flex-shrink:0;background:${isPast ? 'var(--text-dim)' : isUpcoming ? 'var(--orange)' : d.highlight ? 'var(--red)' : 'var(--accent)'}"></div>
+      <span style="width:100px;flex-shrink:0;color:${isUpcoming ? 'var(--orange)' : 'var(--text-muted)'};font-weight:${isUpcoming || d.highlight ? '600' : '400'}">${dateStr}</span>
+      <span style="color:var(--text);${d.highlight ? 'font-weight:600' : ''}">${d.label}${isPast ? ' (passed)' : isUpcoming ? ' — coming up!' : ''}</span>
+    </div>`;
+  });
+  html += '</div>';
+
   // Important Notices (personalized alerts)
   const notices = [];
   if (r.refundOrOwed < -1000) {
