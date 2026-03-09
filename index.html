@@ -437,7 +437,7 @@ const GITHUB_LICENSE = GITHUB_REPO + '/blob/main/LICENSE';
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_51T8wONRsVTiXg9w7lAViMeXUo3BjYuVQ5CPjfHIFjPOCd0tVRqSehgbfpTT3xJwagQnuOgBNzE7r0e9HUr7f51pY00cUcmUkO6';
 // TODO: Replace with your Stripe Payment Links (created in Stripe Dashboard)
 const STRIPE_PAYMENT_LINKS = {
-  three_questions: '', // $5 for 3 questions payment link
+  three_questions: 'https://buy.stripe.com/6oU3cxfEC10pfokgNV1Nu00', // $5 for 3 questions payment link
 };
 let stripeInstance = null;
 try {
@@ -445,6 +445,17 @@ try {
     stripeInstance = Stripe(STRIPE_PUBLISHABLE_KEY);
   }
 } catch(e) { console.warn('Stripe not loaded:', e); }
+
+// Check for payment return from Stripe
+let PAID_QUESTIONS = 0;
+try {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('paid')) {
+    PAID_QUESTIONS = parseInt(urlParams.get('paid')) || 0;
+    // Clean up URL without reloading
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+} catch(e) {}
 
 // ═══════════════════════════════════════════════════════════════
 // 2025 TAX PARAMETERS
@@ -2101,10 +2112,10 @@ function renderReturn(r) {
         ${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
         <div style="background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
           <div>
-            <div style="color:var(--accent-light);font-size:13px;font-weight:600">Want a more accurate estimate?</div>
+            <div style="color:var(--accent-light);font-size:13px;font-weight:600">Want a more accurate estimate? · $5 for 3 questions</div>
             <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length} questions can refine your return</div>
           </div>
-          <button onclick="setTab('assumptions')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Refine Now</button>
+          <button onclick="setTab('assumptions')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Refine Now · $5</button>
         </div>
         ` : ''}
 
@@ -2439,7 +2450,7 @@ function renderAssumptions(r) {
       <div style="margin-top:10px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div>
           <div style="color:var(--accent-light);font-size:14px;font-weight:700">$5 for 3 questions</div>
-          <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${answeredCount >= 3 ? 'All additional questions are free' : answeredCount > 0 ? freeQsLeft + ' question' + (freeQsLeft !== 1 ? 's' : '') + ' remaining in your $5 bundle' : 'First 3 refinements for $5 total · Free after that'}</div>
+          <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${answeredCount >= 3 ? 'All additional questions are free' : PAID_QUESTIONS > 0 ? PAID_QUESTIONS + ' paid question' + (PAID_QUESTIONS !== 1 ? 's' : '') + ' ready to use' : answeredCount > 0 ? freeQsLeft + ' question' + (freeQsLeft !== 1 ? 's' : '') + ' remaining in your $5 bundle' : 'First 3 refinements for $5 total · Free after that'}</div>
         </div>
         <div style="color:var(--accent-light);font-size:20px;font-weight:800">$5</div>
       </div>
@@ -2461,6 +2472,7 @@ function renderAssumptions(r) {
     unanswered.forEach((a, i) => {
       const canInteract = getAssumptionForm(a.id) !== null;
       const isFree = answeredCount >= 3 || !canInteract;
+      const needsPayment = canInteract && !isFree && PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions;
       html += `
         <div class="assumption-card">
           <div style="flex:1">
@@ -2470,8 +2482,8 @@ function renderAssumptions(r) {
             </div>
             <div class="assumption-text">${a.text}</div>
           </div>
-          <button class="btn-answer" onclick="answerQuestion('${a.id}')" style="${canInteract ? 'padding:8px 16px;font-size:13px' : ''}">
-            ${canInteract ? (isFree ? 'Refine (free)' : 'Refine') : 'OK'}
+          <button class="btn-answer" onclick="answerQuestion('${a.id}')" style="${canInteract ? 'padding:8px 16px;font-size:13px' : ''}${needsPayment ? ';background:var(--green)' : ''}">
+            ${!canInteract ? 'OK' : needsPayment ? 'Pay $5 → Refine' : isFree ? 'Refine (free)' : 'Refine'}
           </button>
         </div>
       `;
@@ -2910,8 +2922,23 @@ function setTab(t) {
 }
 
 function answerQuestion(id) {
-  // Show an interactive form based on the assumption type
   const formHtml = getAssumptionForm(id);
+
+  // Check if this is a paid question (first 3 interactive questions)
+  if (formHtml && STATE.answeredQs.size < 3 && PAID_QUESTIONS <= 0) {
+    // Need payment — redirect to Stripe
+    if (STRIPE_PAYMENT_LINKS.three_questions) {
+      window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
+      return;
+    }
+    // If no payment link configured, allow free access (beta mode)
+  }
+
+  // Deduct from paid questions if applicable
+  if (formHtml && PAID_QUESTIONS > 0 && !STATE.answeredQs.has(id)) {
+    PAID_QUESTIONS--;
+  }
+
   if (formHtml) {
     showAssumptionModal(id, formHtml);
   } else {
