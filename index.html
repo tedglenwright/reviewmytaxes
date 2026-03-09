@@ -752,6 +752,32 @@ function renderReturn(r) {
           html += '</div></div>';
           return html;
         })()}
+        ${(() => {
+          // Tax composition breakdown
+          if (r.totalTax <= 0) return '';
+          const taxParts = [];
+          if (r.incomeTax > 0) taxParts.push({ label: 'Income tax', amount: r.incomeTax, color: '#3b82f6' });
+          if (r.seTax > 0) taxParts.push({ label: 'SE tax', amount: r.seTax, color: '#f97316' });
+          if (r.niit > 0) taxParts.push({ label: 'NIIT', amount: r.niit, color: '#ec4899' });
+          if (r.amt > 0) taxParts.push({ label: 'AMT', amount: r.amt, color: '#ef4444' });
+          if (r.stateResult && r.stateResult.tax > 0) taxParts.push({ label: r.stateResult.stateName, amount: r.stateResult.tax, color: '#8b5cf6' });
+          if (taxParts.length <= 1) return '';
+          const totalForChart = taxParts.reduce((s, x) => s + x.amount, 0);
+          let html = '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap">';
+          html += '<div style="font-size:11px;color:var(--text-dim);font-weight:600;width:100%;margin-bottom:4px">Tax Breakdown</div>';
+          html += '<div style="flex:1;min-width:200px;height:24px;border-radius:4px;overflow:hidden;display:flex">';
+          taxParts.forEach(p => {
+            const pct = (p.amount / totalForChart * 100);
+            if (pct >= 1) html += '<div title="' + p.label + ': $' + fmt(p.amount) + ' (' + pct.toFixed(0) + '%)" style="width:' + pct + '%;background:' + p.color + ';height:100%"></div>';
+          });
+          html += '</div>';
+          html += '<div style="display:flex;flex-wrap:wrap;gap:8px 14px">';
+          taxParts.forEach(p => {
+            html += '<div style="font-size:11px;display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;border-radius:2px;background:' + p.color + '"></div><span style="color:var(--text-muted)">' + p.label + '</span><span style="color:var(--text);font-weight:600">$' + fmt(p.amount) + '</span></div>';
+          });
+          html += '</div></div>';
+          return html;
+        })()}
         ${sectionHeader('Form 1040 — Income', 'Lines 1–9')}
         ${r.totalWages > 0 ? (() => {
           let wageHtml = lineItem('1a. Wages, salaries, tips', r.totalWages, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''});
