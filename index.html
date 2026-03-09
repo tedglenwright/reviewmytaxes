@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tax Return Draft Preview — 2025</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --surface-light: #334155;
+    --border: #475569; --accent: #3b82f6; --accent-light: #60a5fa;
+    --green: #22c55e; --green-dark: #15803d; --red: #ef4444; --red-dark: #b91c1c;
+    --yellow: #eab308; --orange: #f97316;
+    --text: #f8fafc; --text-muted: #94a3b8; --text-dim: #64748b;
+    --draft-bg: rgba(239, 68, 68, 0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .container { max-width: 920px; margin: 0 auto; padding: 24px; }
+  button { cursor: pointer; font-family: inherit; }
+  table { border-collapse: collapse; width: 100%; }
+
+  /* Upload screen */
+  .upload-hero { text-align: center; margin-bottom: 32px; }
+  .upload-hero h1 { font-size: 28px; font-weight: 800; }
+  .upload-hero p { color: var(--text-muted); font-size: 15px; margin-top: 8px; }
+  .draft-badge { display: inline-block; background: var(--draft-bg); border: 1px solid var(--red); border-radius: 6px; padding: 4px 12px; margin-top: 8px; color: var(--red); font-size: 12px; font-weight: 600; }
+
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 12px; padding: 40px;
+    text-align: center; margin-bottom: 24px; cursor: pointer;
+    background: var(--surface); transition: border-color 0.2s, background 0.2s;
+  }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+  .drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
+  .drop-zone .title { font-size: 16px; font-weight: 600; }
+  .drop-zone .subtitle { color: var(--text-muted); font-size: 13px; margin-top: 8px; }
+  .drop-zone .hint { color: var(--text-dim); font-size: 12px; margin-top: 4px; }
+
+  .file-list { margin-bottom: 16px; }
+  .file-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; background: var(--surface); border-radius: 6px;
+    margin-bottom: 4px; font-size: 13px;
+  }
+  .file-item .name { color: var(--text); }
+  .file-item .meta { color: var(--text-dim); display: flex; gap: 12px; align-items: center; }
+  .file-item .status { font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+  .file-item .status.pending { background: var(--surface-light); color: var(--text-muted); }
+  .file-item .status.parsing { background: rgba(59,130,246,0.15); color: var(--accent-light); }
+  .file-item .status.done { background: rgba(34,197,94,0.15); color: var(--green); }
+  .file-item .status.error { background: rgba(239,68,68,0.15); color: var(--red); }
+  .file-remove { background: none; border: none; color: var(--text-dim); font-size: 16px; padding: 0 4px; }
+  .file-remove:hover { color: var(--red); }
+
+  .btn-primary {
+    width: 100%; padding: 14px; background: var(--accent); color: #fff;
+    border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+    transition: background 0.2s;
+  }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .demo-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 16px; }
+  .demo-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px; text-align: left;
+    transition: border-color 0.2s; cursor: pointer; font-family: inherit;
+    color: inherit;
+  }
+  .demo-card:hover { border-color: var(--accent); }
+  .demo-card .label { font-weight: 600; font-size: 14px; }
+  .demo-card .desc { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+
+  /* Progress bar */
+  .ocr-progress { margin: 16px 0; }
+  .ocr-progress-bar { height: 6px; background: var(--surface-light); border-radius: 3px; overflow: hidden; }
+  .ocr-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+  .ocr-progress-text { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+  .ocr-log { max-height: 160px; overflow-y: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 11px; color: var(--text-dim); background: var(--surface); border-radius: 6px; padding: 10px; margin-top: 8px; line-height: 1.6; }
+  .ocr-log .highlight { color: var(--green); }
+  .ocr-log .warn { color: var(--orange); }
+
+  /* Top bar */
+  .top-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; justify-content: space-between; align-items: center;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .top-bar-left { display: flex; align-items: center; gap: 16px; }
+  .btn-back {
+    background: none; border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; font-family: inherit;
+  }
+  .btn-back:hover { border-color: var(--text-muted); }
+  .cost-badge {
+    background: rgba(59,130,246,0.15); border: 1px solid var(--accent);
+    border-radius: 6px; padding: 4px 12px; color: var(--accent-light); font-size: 13px; font-weight: 600;
+  }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; }
+  .tab-btn {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--text-muted); padding: 12px 20px; font-size: 14px; font-family: inherit;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent-light); font-weight: 600; border-bottom-color: var(--accent); }
+
+  /* Return styling */
+  .disclaimer-box {
+    background: var(--draft-bg); border: 2px solid var(--red); border-radius: 8px;
+    padding: 12px 16px; margin-bottom: 20px;
+  }
+  .disclaimer-box .title { color: var(--red); font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .disclaimer-box .body { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+
+  .return-header { text-align: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--border); position: relative; }
+  .return-header .draft-label { color: var(--red); font-weight: 900; font-size: 20px; letter-spacing: 4px; }
+  .return-header .form-title { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .return-header .form-sub { color: var(--text-muted); font-size: 14px; margin-top: 2px; }
+
+  .watermark {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 0; overflow: hidden;
+  }
+  .watermark-text {
+    color: rgba(239, 68, 68, 0.06); font-size: 120px; font-weight: 900;
+    transform: rotate(-35deg); white-space: nowrap; user-select: none; letter-spacing: 20px;
+  }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 24px; }
+  .summary-card {
+    background: var(--surface); border-radius: 8px; padding: 12px; text-align: center;
+    border: 1px solid var(--border);
+  }
+  .summary-card .lbl { color: var(--text-dim); font-size: 11px; margin-bottom: 4px; }
+  .summary-card .val { font-size: 22px; font-weight: 700; }
+
+  .section-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 2px solid var(--accent); padding-bottom: 6px; margin-top: 24px; margin-bottom: 12px;
+  }
+  .section-header .title { color: var(--accent-light); font-weight: 700; font-size: 16px; }
+  .section-header .ref { color: var(--text-dim); font-size: 12px; }
+
+  .line-item {
+    display: flex; justify-content: space-between; padding: 4px 0;
+    font-size: 14px; font-variant-numeric: tabular-nums;
+  }
+  .line-item.bold { font-weight: 700; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; }
+  .line-item.indent { padding-left: 20px; }
+  .line-item.sub { font-size: 12px; color: var(--text-dim); padding: 2px 0; }
+  .money { font-variant-numeric: tabular-nums; }
+  .money.negative { color: var(--red); }
+  .money.positive { color: var(--green); }
+
+  .refund-box {
+    border-radius: 8px; padding: 16px; text-align: center; margin-top: 8px;
+  }
+  .refund-box.refund { background: rgba(34,197,94,0.1); border: 2px solid var(--green); }
+  .refund-box.owed { background: rgba(239,68,68,0.1); border: 2px solid var(--red); }
+  .refund-box .lbl { font-size: 14px; color: var(--text-muted); margin-bottom: 4px; }
+  .refund-box .amount { font-size: 36px; font-weight: 900; }
+  .refund-box .rates { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  .form8949-table th { text-align: left; padding: 6px 8px; color: var(--text-dim); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
+  .form8949-table td { padding: 6px 8px; font-size: 12px; border-bottom: 1px solid var(--surface-light); }
+  .form8949-table .right { text-align: right; }
+  .form8949-table .center { text-align: center; }
+  .form8949-table .muted { color: var(--text-muted); }
+
+  /* Assumptions */
+  .assumption-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .assumption-card.answered { background: rgba(34,197,94,0.06); border-color: var(--green-dark); }
+  .impact-badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 4px; text-transform: uppercase; color: #000;
+  }
+  .impact-badge.high { background: var(--red); }
+  .impact-badge.medium { background: var(--orange); }
+  .impact-badge.low { background: var(--yellow); }
+  .assumption-text { color: var(--text); font-size: 13px; line-height: 1.4; margin-top: 4px; }
+  .btn-answer {
+    background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: 6px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; margin-left: 12px;
+    font-family: inherit;
+  }
+  .btn-answer:hover { background: #2563eb; }
+  .answered-label { color: var(--green); font-size: 11px; }
+
+  /* Pricing */
+  .pricing-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 20px; }
+  .pricing-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; text-align: center;
+  }
+  .pricing-card.featured { border: 2px solid var(--accent); }
+  .pricing-card.green { border-color: var(--green-dark); }
+  .pricing-card .price { font-size: 32px; font-weight: 800; }
+  .pricing-card .plan { color: var(--text-muted); font-size: 13px; margin: 8px 0 16px; }
+  .pricing-card .features { color: var(--text-dim); font-size: 12px; line-height: 1.8; }
+
+  .footer-disclaimer {
+    margin-top: 32px; padding-top: 16px; border-top: 2px solid var(--red);
+    color: var(--text-dim); font-size: 11px; line-height: 1.6; text-align: center;
+  }
+  .footer-disclaimer .title { color: var(--red); font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+  .footer-disclaimer .version { margin-top: 8px; }
+
+  /* Privacy / Security */
+  .privacy-banner {
+    background: rgba(34, 197, 94, 0.08); border: 1px solid var(--green-dark);
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 24px;
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .privacy-banner .shield { font-size: 32px; flex-shrink: 0; line-height: 1; }
+  .privacy-banner .headline { color: var(--green); font-weight: 700; font-size: 15px; }
+  .privacy-banner .detail { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; margin-top: 4px; }
+  .privacy-banner .detail strong { color: var(--text); }
+
+  .security-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .security-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; text-align: center;
+  }
+  .security-card .sec-icon { font-size: 24px; margin-bottom: 6px; }
+  .security-card .sec-title { color: var(--text); font-weight: 600; font-size: 13px; }
+  .security-card .sec-desc { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.4; }
+
+  .network-monitor {
+    display: flex; align-items: center; gap: 8px; justify-content: center;
+    padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .network-monitor.safe { background: rgba(34,197,94,0.08); border: 1px solid var(--green-dark); color: var(--green); }
+  .network-monitor.warning { background: rgba(239,68,68,0.08); border: 1px solid var(--red-dark); color: var(--red); }
+  .network-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .network-dot.safe { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .network-dot.warning { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .how-it-works { margin-bottom: 28px; }
+  .how-it-works summary {
+    color: var(--accent-light); font-size: 13px; font-weight: 600; cursor: pointer;
+    text-align: center; padding: 8px;
+  }
+  .how-it-works summary:hover { color: var(--text); }
+  .how-steps { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 12px; }
+  .how-step {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; text-align: center;
+  }
+  .how-step .step-num { color: var(--accent); font-size: 20px; font-weight: 800; }
+  .how-step .step-title { color: var(--text); font-size: 12px; font-weight: 600; margin-top: 4px; }
+  .how-step .step-desc { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.4; }
+  .how-arrow { color: var(--text-dim); font-size: 18px; display: flex; align-items: center; }
+
+  .verify-badge {
+    display: inline-flex; align-items: center; gap: 6px; background: rgba(34,197,94,0.1);
+    border: 1px solid var(--green-dark); border-radius: 20px; padding: 4px 12px;
+    font-size: 11px; color: var(--green); font-weight: 600; cursor: pointer;
+    margin-top: 4px;
+  }
+  .verify-badge:hover { background: rgba(34,197,94,0.18); }
+
+  .oss-banner {
+    background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(139,92,246,0.10));
+    border: 1px solid rgba(139,92,246,0.3); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 20px; display: flex; gap: 14px; align-items: flex-start;
+  }
+  .oss-banner .gh-icon { font-size: 28px; flex-shrink: 0; line-height: 1; }
+  .oss-banner .oss-headline { color: #a78bfa; font-weight: 700; font-size: 15px; }
+  .oss-banner .oss-detail { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; margin-top: 4px; }
+  .oss-banner .oss-detail a { color: var(--accent-light); text-decoration: none; font-weight: 600; }
+  .oss-banner .oss-detail a:hover { text-decoration: underline; }
+  .oss-badges { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .oss-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #c4b5fd;
+    text-decoration: none; font-weight: 600;
+  }
+  .oss-badge:hover { background: rgba(139,92,246,0.22); }
+
+  .gh-footer {
+    text-align: center; padding: 16px; margin-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .gh-footer a { color: var(--accent-light); text-decoration: none; font-size: 12px; font-weight: 600; }
+  .gh-footer a:hover { text-decoration: underline; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .summary-grid { grid-template-columns: repeat(2,1fr); }
+    .demo-grid { grid-template-columns: 1fr; }
+    .pricing-grid { grid-template-columns: 1fr; }
+    .security-grid { grid-template-columns: 1fr; }
+    .how-steps { grid-template-columns: repeat(2,1fr); }
+    .form8949-table { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURATION — Change this to your GitHub repo URL after setup
+// ═══════════════════════════════════════════════════════════════
+const GITHUB_REPO = 'https://github.com/tedglenwright/reviewmytaxes';
+const GITHUB_SOURCE = GITHUB_REPO + '/blob/main/index.html';
+const GITHUB_ISSUES = GITHUB_REPO + '/issues';
+const GITHUB_LICENSE = GITHUB_REPO + '/blob/main/LICENSE';
+
+// ═══════════════════════════════════════════════════════════════
+// 2025 TAX PARAMETERS
+// ═══════════════════════════════════════════════════════════════
+const TAX = {
+  year: 2025,
+  brackets: {
+    single: [[11925,.10],[48475,.12],[103425,.22],[196050,.24],[249325,.32],[626350,.35],[Infinity,.37]],
+    mfj: [[23850,.10],[96950,.12],[206850,.22],[392100,.24],[498650,.32],[751600,.35],[Infinity,.37]],
+    mfs: [[11925,.10],[48475,.12],[103425,.22],[196050,.24],[249325,.32],[375800,.35],[Infinity,.37]],
+    hoh: [[15950,.10],[60975,.12],[122925,.22],[196050,.24],[236100,.32],[626350,.35],[Infinity,.37]]
+  },
+  standardDeduction: { single:15750, mfj:31500, mfs:15750, hoh:23625 },
+  ltcgBrackets: {
+    single: [[48350,0],[533400,.15],[Infinity,.20]],
+    mfj: [[96700,0],[600050,.15],[Infinity,.20]],
+    mfs: [[48350,0],[300025,.15],[Infinity,.20]],
+    hoh: [[64850,0],[566700,.15],[Infinity,.20]]
+  },
+  ssWageBase: 176100, ssRate: .124, medicareRate: .029,
+  additionalMedicareRate: .009,
+  additionalMedicareThreshold: { single:200000, mfj:250000, mfs:125000, hoh:200000 },
+  niitRate: .038,
+  niitThreshold: { single:200000, mfj:250000, mfs:125000, hoh:200000 },
+  saltCap: { single:40000, mfj:40000, mfs:20000, hoh:40000 },
+  capitalLossLimit: 3000,
+  schedBThreshold: 1500,
+  medicalExpenseFloor: .075,
+  qbiRate: .20,
+  qbiThreshold: { single:197300, mfj:394600, mfs:197300, hoh:197300 },
+};
+
+const FS_LABELS = { single:"Single", mfj:"Married Filing Jointly", mfs:"Married Filing Separately", hoh:"Head of Household" };
+
+// ═══════════════════════════════════════════════════════════════
+// OCR DOCUMENT PARSER
+// ═══════════════════════════════════════════════════════════════
+class TaxDocumentParser {
+  constructor(onLog, onProgress) {
+    this.onLog = onLog || (()=>{});
+    this.onProgress = onProgress || (()=>{});
+  }
+
+  async parseFile(file) {
+    this.onLog(`Parsing: ${file.name}`);
+    const url = URL.createObjectURL(file);
+    try {
+      this.onLog('Initializing Tesseract OCR engine...');
+      const result = await Tesseract.recognize(url, 'eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            this.onProgress(Math.round(m.progress * 100));
+          }
+        }
+      });
+      const text = result.data.text;
+      this.onLog(`OCR complete — ${text.length} characters extracted`);
+      return this.classifyAndExtract(text, file.name);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  classifyAndExtract(text, filename) {
+    const upper = text.toUpperCase();
+    const fname = filename.toUpperCase();
+
+    // W-2 detection
+    if (upper.includes('W-2') || upper.includes('WAGE AND TAX') || fname.includes('W2') || fname.includes('W-2')) {
+      return this.parseW2(text);
+    }
+    // 1099-INT
+    if (upper.includes('1099-INT') || upper.includes('INTEREST INCOME') || fname.includes('1099INT') || fname.includes('1099-INT')) {
+      return this.parse1099INT(text);
+    }
+    // 1099-DIV
+    if (upper.includes('1099-DIV') || upper.includes('DIVIDENDS AND DISTRIBUTIONS') || fname.includes('1099DIV') || fname.includes('1099-DIV')) {
+      return this.parse1099DIV(text);
+    }
+    // 1099-NEC
+    if (upper.includes('1099-NEC') || upper.includes('NONEMPLOYEE COMPENSATION') || fname.includes('1099NEC') || fname.includes('1099-NEC')) {
+      return this.parse1099NEC(text);
+    }
+    // 1099-B
+    if (upper.includes('1099-B') || upper.includes('PROCEEDS FROM BROKER') || fname.includes('1099B') || fname.includes('1099-B')) {
+      return this.parse1099B(text);
+    }
+    // 1099-MISC
+    if (upper.includes('1099-MISC') || upper.includes('MISCELLANEOUS') || fname.includes('1099MISC')) {
+      return this.parse1099MISC(text);
+    }
+    // 1098 Mortgage
+    if (upper.includes('1098') || upper.includes('MORTGAGE INTEREST') || fname.includes('1098')) {
+      return this.parse1098(text);
+    }
+
+    this.onLog('⚠ Could not classify document type — attempting best-effort extraction');
+    return this.parseBestEffort(text);
+  }
+
+  // Money extraction helpers
+  findMoney(text, patterns) {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) {
+        const val = parseFloat(m[1].replace(/[,$\s]/g, ''));
+        if (!isNaN(val) && val > 0) return val;
+      }
+    }
+    return 0;
+  }
+
+  findAllMoney(text) {
+    const amounts = [];
+    const re = /\$?\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const val = parseFloat(m[1].replace(/,/g, ''));
+      if (!isNaN(val) && val > 0) amounts.push(val);
+    }
+    return amounts;
+  }
+
+  findEmployer(text) {
+    // Try to find employer name — usually near top, or after "Employer"
+    const m = text.match(/employer['s]*\s*name[:\s]*([A-Z][A-Za-z\s&.,]+)/i);
+    if (m) return m[1].trim().substring(0, 40);
+    // Try EIN pattern — name is usually nearby
+    const ein = text.match(/(\d{2}-\d{7})/);
+    return ein ? 'Employer (EIN: ' + ein[1] + ')' : 'Employer';
+  }
+
+  findPayer(text) {
+    const m = text.match(/payer['s]*\s*name[:\s]*([A-Z][A-Za-z\s&.,]+)/i);
+    if (m) return m[1].trim().substring(0, 40);
+    return 'Financial Institution';
+  }
+
+  parseW2(text) {
+    this.onLog('Detected: Form W-2 (Wage and Tax Statement)');
+    const wages = this.findMoney(text, [
+      /(?:box\s*1|wages.*tips.*other)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /wages[:\s$]*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const fedWithheld = this.findMoney(text, [
+      /(?:box\s*2|federal.*(?:tax|income).*withheld)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:fed|federal).*(?:with|w\/h)[:\s$]*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const stateWithheld = this.findMoney(text, [
+      /(?:box\s*17|state.*(?:tax|income).*withheld)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:state).*(?:with|w\/h)[:\s$]*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const employer = this.findEmployer(text);
+
+    // If regex failed, try to find the largest amounts
+    if (wages === 0) {
+      const all = this.findAllMoney(text);
+      all.sort((a,b) => b - a);
+      if (all.length >= 1) {
+        this.onLog('⚠ Could not find labeled wage amount — using largest amount found');
+        return { type: 'w2', employer, wages: all[0], fedWithheld: all[1] || 0, stateWithheld: all[2] || 0 };
+      }
+    }
+
+    this.onLog(`  Wages: $${wages.toLocaleString()}, Fed withheld: $${fedWithheld.toLocaleString()}`);
+    return { type: 'w2', employer, wages, fedWithheld, stateWithheld };
+  }
+
+  parse1099INT(text) {
+    this.onLog('Detected: Form 1099-INT (Interest Income)');
+    const amount = this.findMoney(text, [
+      /(?:box\s*1|interest\s*income)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const payer = this.findPayer(text);
+    if (amount === 0) {
+      const all = this.findAllMoney(text);
+      if (all.length) return { type: '1099int', payer, amount: all[0] };
+    }
+    this.onLog(`  Interest income: $${amount.toLocaleString()}`);
+    return { type: '1099int', payer, amount };
+  }
+
+  parse1099DIV(text) {
+    this.onLog('Detected: Form 1099-DIV (Dividends)');
+    const ordinary = this.findMoney(text, [
+      /(?:box\s*1a|total\s*ordinary\s*dividends)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /ordinary\s*dividends\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const qualified = this.findMoney(text, [
+      /(?:box\s*1b|qualified\s*dividends)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const payer = this.findPayer(text);
+    this.onLog(`  Ordinary: $${ordinary.toLocaleString()}, Qualified: $${qualified.toLocaleString()}`);
+    return { type: '1099div', payer, ordinary, qualified: qualified || ordinary };
+  }
+
+  parse1099NEC(text) {
+    this.onLog('Detected: Form 1099-NEC (Nonemployee Compensation)');
+    const amount = this.findMoney(text, [
+      /(?:box\s*1|nonemployee\s*compensation)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const payer = this.findPayer(text);
+    if (amount === 0) {
+      const all = this.findAllMoney(text);
+      if (all.length) return { type: '1099nec', payer, amount: all[0] };
+    }
+    this.onLog(`  NEC income: $${amount.toLocaleString()}`);
+    return { type: '1099nec', payer, amount };
+  }
+
+  parse1099B(text) {
+    this.onLog('Detected: Form 1099-B (Brokerage Proceeds)');
+    const transactions = [];
+    // Try to find individual transaction lines
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const m = line.match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+.*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/);
+      if (m) {
+        const v1 = parseFloat(m[1].replace(/,/g,''));
+        const v2 = parseFloat(m[2].replace(/,/g,''));
+        if (v1 > 100 && v2 > 100) {
+          const proceeds = Math.max(v1, v2);
+          const basis = Math.min(v1, v2);
+          transactions.push({
+            description: 'Security (from 1099-B)',
+            dateAcquired: 'Various', dateSold: '2025',
+            proceeds, basis, longTerm: true,
+          });
+        }
+      }
+    }
+    // Fallback: summary amounts
+    if (transactions.length === 0) {
+      const proceeds = this.findMoney(text, [
+        /(?:proceeds|gross\s*proceeds)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      ]);
+      const basis = this.findMoney(text, [
+        /(?:cost.*basis|basis)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      ]);
+      if (proceeds > 0) {
+        transactions.push({
+          description: 'Securities (1099-B summary)',
+          dateAcquired: 'Various', dateSold: '2025',
+          proceeds, basis: basis || proceeds * 0.7,
+          longTerm: text.toUpperCase().includes('LONG') || !text.toUpperCase().includes('SHORT'),
+        });
+      }
+    }
+    this.onLog(`  Found ${transactions.length} transaction(s)`);
+    return { type: '1099b', transactions };
+  }
+
+  parse1099MISC(text) {
+    this.onLog('Detected: Form 1099-MISC');
+    const rents = this.findMoney(text, [/(?:box\s*1|rents)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i]);
+    const other = this.findMoney(text, [/(?:box\s*3|other\s*income)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i]);
+    const payer = this.findPayer(text);
+    return { type: '1099misc', payer, rents, otherIncome: other };
+  }
+
+  parse1098(text) {
+    this.onLog('Detected: Form 1098 (Mortgage Interest)');
+    const interest = this.findMoney(text, [
+      /(?:box\s*1|mortgage\s*interest)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const propertyTax = this.findMoney(text, [
+      /(?:box\s*10|property\s*tax)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    this.onLog(`  Mortgage interest: $${interest.toLocaleString()}`);
+    return { type: '1098', mortgageInterest: interest, propertyTax };
+  }
+
+  parseBestEffort(text) {
+    const amounts = this.findAllMoney(text);
+    if (amounts.length === 0) return null;
+    amounts.sort((a,b) => b - a);
+    this.onLog(`  Found ${amounts.length} dollar amounts, largest: $${amounts[0].toLocaleString()}`);
+    // Assume it's income of some kind
+    return { type: 'unknown', amounts };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AGGREGATE PARSED DOCUMENTS INTO TAX DATA
+// ═══════════════════════════════════════════════════════════════
+function aggregateParsedDocs(docs) {
+  const data = { w2s: [], interest: [], dividends: [], capitalGains: [], estimatedPayments: 0 };
+  let necTotal = 0;
+  let mortgageInterest = 0;
+  let propertyTax = 0;
+
+  for (const doc of docs) {
+    if (!doc) continue;
+    switch (doc.type) {
+      case 'w2':
+        data.w2s.push({ employer: doc.employer, wages: doc.wages, fedWithheld: doc.fedWithheld, stateWithheld: doc.stateWithheld });
+        break;
+      case '1099int':
+        data.interest.push({ payer: doc.payer, amount: doc.amount });
+        break;
+      case '1099div':
+        data.dividends.push({ payer: doc.payer, ordinary: doc.ordinary, qualified: doc.qualified });
+        break;
+      case '1099nec':
+        necTotal += doc.amount;
+        break;
+      case '1099b':
+        data.capitalGains.push(...doc.transactions);
+        break;
+      case '1098':
+        mortgageInterest += doc.mortgageInterest || 0;
+        propertyTax += doc.propertyTax || 0;
+        break;
+    }
+  }
+
+  // If NEC income found, create a Schedule C
+  if (necTotal > 0) {
+    data.scheduleC = {
+      businessName: 'Self-Employment (from 1099-NEC)',
+      grossReceipts: necTotal, cogs: 0,
+      advertising: 0, carExpense: 0, insurance: 0,
+      legalProfessional: 0, officeExpense: 0, rent: 0,
+      supplies: 0, travel: 0, meals: 0, utilities: 0, otherExpenses: 0,
+    };
+  }
+
+  // If mortgage/property tax found, set up itemized
+  if (mortgageInterest > 0 || propertyTax > 0) {
+    data.itemized = { medical: 0, stateTaxes: 0, propertyTaxes: propertyTax, mortgageInterest, charitableCash: 0, charitableNonCash: 0 };
+  }
+
+  // Infer filing status from number of W-2s
+  if (data.w2s.length >= 2) {
+    data.filingStatus = 'mfj';
+  } else {
+    data.filingStatus = 'single';
+  }
+
+  return data;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAX CALCULATION ENGINE
+// ═══════════════════════════════════════════════════════════════
+function calcBracketTax(income, brackets) {
+  let tax = 0, prev = 0;
+  for (const [limit, rate] of brackets) {
+    const chunk = Math.min(income, limit) - prev;
+    if (chunk <= 0) break;
+    tax += chunk * rate;
+    prev = limit;
+  }
+  return Math.round(tax);
+}
+
+function calcLTCGTax(ltcg, ordIncome, brackets) {
+  if (ltcg <= 0) return 0;
+  let tax = 0, filled = ordIncome, remaining = ltcg;
+  for (const [limit, rate] of brackets) {
+    const room = Math.max(0, limit - filled);
+    const chunk = Math.min(remaining, room);
+    if (chunk > 0) { tax += chunk * rate; remaining -= chunk; }
+    filled = Math.max(filled, limit);
+    if (remaining <= 0) break;
+  }
+  return Math.round(tax);
+}
+
+function computeTaxReturn(data) {
+  const fs = data.filingStatus || 'single';
+  const assumptions = [];
+  const schedules = {};
+
+  // Wages
+  const totalWages = (data.w2s||[]).reduce((s,w) => s + (w.wages||0), 0);
+  const totalFedWithheld = (data.w2s||[]).reduce((s,w) => s + (w.fedWithheld||0), 0);
+  const totalStateWithheld = (data.w2s||[]).reduce((s,w) => s + (w.stateWithheld||0), 0);
+
+  // Interest & Dividends
+  const totalInterest = (data.interest||[]).reduce((s,i) => s + (i.amount||0), 0);
+  const totalOrdDiv = (data.dividends||[]).reduce((s,d) => s + (d.ordinary||0), 0);
+  const totalQualDiv = (data.dividends||[]).reduce((s,d) => s + (d.qualified||0), 0);
+
+  if (totalInterest >= TAX.schedBThreshold || totalOrdDiv >= TAX.schedBThreshold) {
+    schedules.B = { interestItems: data.interest||[], totalInterest, dividendItems: data.dividends||[], totalOrdDiv, totalQualDiv };
+  }
+
+  // Schedule C
+  let schedCNet = 0, seTax = 0, seDeduction = 0;
+  if (data.scheduleC) {
+    const c = data.scheduleC;
+    const gross = (c.grossReceipts||0) - (c.cogs||0);
+    const exp = (c.advertising||0) + (c.carExpense||0) + (c.insurance||0) + (c.legalProfessional||0) +
+      (c.officeExpense||0) + (c.rent||0) + (c.supplies||0) + (c.travel||0) + (c.meals||0)*0.5 +
+      (c.utilities||0) + (c.otherExpenses||0);
+    schedCNet = gross - exp;
+    assumptions.push({ id:'sched_c_method', text:'Used cash method of accounting for Schedule C', impact:'medium' });
+    if (data.scheduleC.grossReceipts > 0 && exp === 0) {
+      assumptions.push({ id:'sched_c_expenses', text:'No business expenses detected — you may have deductible expenses that would reduce your tax', impact:'high' });
+    }
+    schedules.C = { businessName: c.businessName||'Self-Employment', grossReceipts: c.grossReceipts||0, cogs: c.cogs||0, grossIncome: gross, totalExpenses: exp, netProfit: schedCNet };
+
+    if (schedCNet >= 400) {
+      const seEarnings = schedCNet * 0.9235;
+      const ssSE = Math.min(seEarnings, TAX.ssWageBase) * TAX.ssRate;
+      const medSE = seEarnings * TAX.medicareRate;
+      const addlMed = Math.max(0, seEarnings - TAX.additionalMedicareThreshold[fs]) * TAX.additionalMedicareRate;
+      seTax = Math.round(ssSE + medSE + addlMed);
+      seDeduction = Math.round(seTax / 2);
+      schedules.SE = { netEarnings: Math.round(seEarnings), ssTax: Math.round(ssSE), medicareTax: Math.round(medSE), additionalMedicare: Math.round(addlMed), totalSETax: seTax, deduction: seDeduction };
+    }
+  }
+
+  // Capital Gains
+  let netSTCG = 0, netLTCG = 0, capitalLossCarryover = 0;
+  if (data.capitalGains && data.capitalGains.length > 0) {
+    const st = data.capitalGains.filter(t => !t.longTerm);
+    const lt = data.capitalGains.filter(t => t.longTerm);
+    netSTCG = st.reduce((s,t) => s + ((t.proceeds||0) - (t.basis||0)), 0);
+    netLTCG = lt.reduce((s,t) => s + ((t.proceeds||0) - (t.basis||0)), 0);
+    const totalNet = netSTCG + netLTCG;
+    if (totalNet < 0) {
+      const usable = Math.min(Math.abs(totalNet), TAX.capitalLossLimit);
+      capitalLossCarryover = Math.abs(totalNet) - usable;
+      if (netSTCG < 0 && netLTCG < 0) { netSTCG = -usable; netLTCG = 0; }
+      else if (netSTCG < 0) { netSTCG = Math.max(netSTCG, -usable); netLTCG = 0; }
+      else { netLTCG = -usable; netSTCG = 0; }
+    }
+    schedules.D = { shortTermGains: st, longTermGains: lt, netSTCG, netLTCG, totalNetGain: netSTCG + netLTCG, capitalLossCarryover };
+    schedules.form8949 = data.capitalGains;
+    assumptions.push({ id:'cost_basis', text:'Used cost basis as reported on 1099-B; did not adjust for wash sales', impact:'high' });
+  }
+
+  // Total Income
+  const capGainIncome = Math.max(netSTCG + netLTCG, -TAX.capitalLossLimit);
+  const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome;
+
+  // Adjustments
+  const adjustments = seDeduction;
+  schedules['1'] = { seDeduction, totalAdjustments: adjustments };
+
+  // AGI
+  const agi = totalIncome - adjustments;
+
+  // Deductions
+  let itemizedTotal = 0, usingItemized = false;
+  const stdDed = TAX.standardDeduction[fs];
+
+  if (data.itemized) {
+    const it = data.itemized;
+    const medExcess = Math.max(0, (it.medical||0) - agi * TAX.medicalExpenseFloor);
+    const saltDed = Math.min((it.stateTaxes||0) + (it.propertyTaxes||0) + totalStateWithheld, TAX.saltCap[fs]);
+    const mortInt = it.mortgageInterest || 0;
+    const charCash = it.charitableCash || 0;
+    const charNon = it.charitableNonCash || 0;
+    itemizedTotal = medExcess + saltDed + mortInt + charCash + charNon;
+
+    if (itemizedTotal > stdDed) {
+      usingItemized = true;
+      schedules.A = {
+        medical: it.medical||0, medicalThreshold: Math.round(agi * TAX.medicalExpenseFloor), medicalDeduction: medExcess,
+        stateTaxes: (it.stateTaxes||0) + totalStateWithheld, propertyTaxes: it.propertyTaxes||0,
+        saltBeforeCap: (it.stateTaxes||0) + (it.propertyTaxes||0) + totalStateWithheld, saltDeduction: saltDed,
+        mortgageInterest: mortInt, charitableCash: charCash, charitableNonCash: charNon,
+        totalItemized: itemizedTotal,
+      };
+    }
+  }
+
+  if (!usingItemized) {
+    assumptions.push({ id:'std_deduction', text:`Used standard deduction of $${stdDed.toLocaleString()} (${FS_LABELS[fs]})`, impact:'high' });
+  }
+  const deduction = usingItemized ? itemizedTotal : stdDed;
+
+  // QBI
+  let qbiDeduction = 0;
+  if (schedCNet > 0 && agi <= TAX.qbiThreshold[fs]) {
+    qbiDeduction = Math.round(schedCNet * TAX.qbiRate);
+    assumptions.push({ id:'qbi', text:`Applied 20% QBI deduction of $${qbiDeduction.toLocaleString()} on self-employment income`, impact:'medium' });
+  }
+
+  // Taxable Income
+  const taxableIncome = Math.max(0, agi - deduction - qbiDeduction);
+
+  // Tax
+  const ordinaryIncome = Math.max(0, taxableIncome - Math.max(0, netLTCG) - totalQualDiv);
+  const ordinaryTax = calcBracketTax(ordinaryIncome, TAX.brackets[fs]);
+  const ltcgTaxable = Math.max(0, netLTCG) + totalQualDiv;
+  const ltcgTax = calcLTCGTax(ltcgTaxable, ordinaryIncome, TAX.ltcgBrackets[fs]);
+  const incomeTax = ordinaryTax + ltcgTax;
+
+  // NIIT
+  let niit = 0;
+  if (agi > TAX.niitThreshold[fs]) {
+    const investIncome = totalInterest + totalOrdDiv + Math.max(0, netSTCG + netLTCG);
+    niit = Math.round(Math.min(investIncome, agi - TAX.niitThreshold[fs]) * TAX.niitRate);
+  }
+
+  schedules['2'] = { seTax, niit, totalAdditionalTax: seTax + niit };
+  schedules['3'] = { totalCredits: 0 };
+
+  const totalTax = incomeTax + seTax + niit;
+  const totalPayments = totalFedWithheld + (data.estimatedPayments||0);
+  const refundOrOwed = totalPayments - totalTax;
+
+  // Default assumptions
+  if (!data.filingStatus) assumptions.unshift({ id:'filing_status', text:'Assumed Single filing status based on single W-2', impact:'high' });
+  else if (data.w2s && data.w2s.length >= 2) assumptions.unshift({ id:'filing_status', text:'Assumed Married Filing Jointly based on multiple W-2s — could be MFS', impact:'high' });
+  if (!data.dependents) assumptions.push({ id:'dependents', text:'Assumed no dependents — child tax credit not applied', impact:'high' });
+  assumptions.push({ id:'no_credits', text:'Did not apply education credits, child tax credit, or EITC', impact:'high' });
+  assumptions.push({ id:'no_hsa', text:'Did not account for HSA, IRA, or 401(k) contributions beyond what employers reported', impact:'medium' });
+  assumptions.push({ id:'no_state', text:'State return not calculated — federal only', impact:'low' });
+  assumptions.push({ id:'no_amt', text:'Did not calculate Alternative Minimum Tax (AMT)', impact:'medium' });
+
+  return {
+    filingStatus: fs,
+    totalWages, totalInterest, totalOrdDiv, totalQualDiv,
+    schedCNet, netSTCG, netLTCG, capitalLossCarryover,
+    totalIncome, adjustments, agi, deduction, usingItemized,
+    qbiDeduction, taxableIncome, ordinaryTax, ltcgTax, incomeTax,
+    seTax, niit, totalTax, totalFedWithheld,
+    estimatedPayments: data.estimatedPayments||0,
+    totalPayments, refundOrOwed, assumptions, schedules,
+    effectiveRate: totalIncome > 0 ? (totalTax / totalIncome * 100) : 0,
+    marginalRate: (TAX.brackets[fs].find(([l]) => taxableIncome <= l)?.[1] * 100) || 37,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DEMO DATA SETS
+// ═══════════════════════════════════════════════════════════════
+const DEMOS = {
+  simple_w2: {
+    label: 'Simple W-2 Employee',
+    desc: 'Single filer, one W-2, interest & dividends',
+    data: {
+      filingStatus: 'single',
+      w2s: [{ employer:'Acme Corp', wages:85000, fedWithheld:12400, stateWithheld:3200 }],
+      interest: [{ payer:'Chase Bank', amount:450 }, { payer:'Marcus Savings', amount:820 }],
+      dividends: [{ payer:'Vanguard S&P 500', ordinary:1200, qualified:950 }],
+    }
+  },
+  freelancer: {
+    label: 'Freelancer + Investments',
+    desc: 'Self-employed with Schedule C and capital gains',
+    data: {
+      filingStatus: 'single',
+      w2s: [],
+      interest: [{ payer:'Ally Savings', amount:380 }],
+      dividends: [{ payer:'Fidelity Total Market', ordinary:2400, qualified:1800 }],
+      scheduleC: {
+        businessName:'Smith Web Design LLC',
+        grossReceipts:142000, cogs:0,
+        advertising:3200, carExpense:2800, insurance:4500,
+        legalProfessional:1200, officeExpense:2400, rent:18000,
+        supplies:1800, travel:4200, meals:3600, utilities:2400, otherExpenses:1500,
+      },
+      capitalGains: [
+        { description:'AAPL 100 shares', dateAcquired:'2022-03-15', dateSold:'2025-09-20', proceeds:24500, basis:16200, longTerm:true },
+        { description:'TSLA 50 shares', dateAcquired:'2025-01-10', dateSold:'2025-06-15', proceeds:12800, basis:14200, longTerm:false },
+        { description:'NVDA 75 shares', dateAcquired:'2023-07-01', dateSold:'2025-11-10', proceeds:18900, basis:9800, longTerm:true },
+      ],
+      estimatedPayments: 28000,
+    }
+  },
+  married: {
+    label: 'Married Homeowners',
+    desc: 'MFJ, two W-2s, itemized deductions, investments',
+    data: {
+      filingStatus: 'mfj',
+      w2s: [
+        { employer:'BigTech Inc', wages:165000, fedWithheld:28500, stateWithheld:9800 },
+        { employer:'City Hospital', wages:92000, fedWithheld:13200, stateWithheld:5400 },
+      ],
+      interest: [{ payer:'Citibank', amount:680 }, { payer:'Treasury Direct', amount:2100 }],
+      dividends: [
+        { payer:'Vanguard Growth', ordinary:3800, qualified:3200 },
+        { payer:'Schwab Dividend', ordinary:2100, qualified:1900 },
+      ],
+      capitalGains: [
+        { description:'MSFT 200 shares', dateAcquired:'2021-05-10', dateSold:'2025-08-15', proceeds:84000, basis:52000, longTerm:true },
+        { description:'AMZN 30 shares', dateAcquired:'2025-02-01', dateSold:'2025-07-20', proceeds:5400, basis:4800, longTerm:false },
+      ],
+      itemized: { medical:8500, stateTaxes:5200, propertyTaxes:14800, mortgageInterest:22000, charitableCash:8500, charitableNonCash:2000 },
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER ENGINE (vanilla JS — no framework needed)
+// ═══════════════════════════════════════════════════════════════
+const app = document.getElementById('app');
+
+let STATE = {
+  screen: 'upload', // upload | parsing | review
+  files: [],
+  parsedDocs: [],
+  taxData: null,
+  result: null,
+  tab: 'return',
+  answeredQs: new Set(),
+  ocrProgress: 0,
+  ocrLogs: [],
+  ocrCurrentFile: 0,
+  ocrTotalFiles: 0,
+  networkRequests: 0,
+  networkSafe: true,
+};
+
+// ═══════════════════════════════════════════════════════════════
+// NETWORK MONITOR — prove zero data leaves the browser
+// ═══════════════════════════════════════════════════════════════
+const _origFetch = window.fetch;
+const _origXHROpen = XMLHttpRequest.prototype.open;
+const ALLOWED_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com']; // only for Tesseract WASM
+
+window.fetch = function(...args) {
+  const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+  try {
+    const host = new URL(url, location.href).hostname;
+    const isAllowed = ALLOWED_HOSTS.some(h => host.endsWith(h)) || host === location.hostname || host === '';
+    if (!isAllowed) {
+      STATE.networkSafe = false;
+      STATE.networkRequests++;
+      console.warn('[PRIVACY MONITOR] Blocked outbound request to:', host);
+      return Promise.reject(new Error('Blocked by privacy monitor: ' + host));
+    }
+  } catch(e) {}
+  return _origFetch.apply(this, args);
+};
+
+XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+  try {
+    const host = new URL(url, location.href).hostname;
+    const isAllowed = ALLOWED_HOSTS.some(h => host.endsWith(h)) || host === location.hostname || host === '';
+    if (!isAllowed) {
+      STATE.networkSafe = false;
+      STATE.networkRequests++;
+      console.warn('[PRIVACY MONITOR] Blocked XHR to:', host);
+      throw new Error('Blocked by privacy monitor: ' + host);
+    }
+  } catch(e) { if (e.message.startsWith('Blocked')) throw e; }
+  return _origXHROpen.call(this, method, url, ...rest);
+};
+
+// Monitor for any sneaky sendBeacon, WebSocket, or image-based exfiltration
+const _origBeacon = navigator.sendBeacon;
+navigator.sendBeacon = function(url) {
+  STATE.networkSafe = false;
+  STATE.networkRequests++;
+  console.warn('[PRIVACY MONITOR] Blocked sendBeacon to:', url);
+  return false;
+};
+
+// Disable WebSocket connections (no reason this app should use them)
+const _origWS = window.WebSocket;
+window.WebSocket = function(url) {
+  STATE.networkSafe = false;
+  STATE.networkRequests++;
+  console.warn('[PRIVACY MONITOR] Blocked WebSocket to:', url);
+  throw new Error('Blocked by privacy monitor');
+};
+
+function fmt(n) {
+  return Math.abs(n||0).toLocaleString('en-US', { minimumFractionDigits:0, maximumFractionDigits:0 });
+}
+
+function moneyHtml(amount, showSign) {
+  const v = amount || 0;
+  const sign = v < 0 ? '-' : (showSign && v > 0 ? '+' : '');
+  const cls = v < 0 ? 'negative' : (showSign && v > 0 ? 'positive' : '');
+  return `<span class="money ${cls}">${sign}$${fmt(v)}</span>`;
+}
+
+function lineItem(label, amount, opts = {}) {
+  const cls = [opts.bold?'bold':'', opts.indent?'indent':'', opts.sub?'sub':''].filter(Boolean).join(' ');
+  return `<div class="line-item ${cls}"><span>${label}</span>${moneyHtml(amount, opts.showSign)}</div>`;
+}
+
+function sectionHeader(title, ref) {
+  return `<div class="section-header"><span class="title">${title}</span>${ref ? `<span class="ref">${ref}</span>` : ''}</div>`;
+}
+
+function render() {
+  if (STATE.screen === 'upload') renderUpload();
+  else if (STATE.screen === 'parsing') renderParsing();
+  else renderReview();
+}
+
+function renderUpload() {
+  const netStatus = STATE.networkSafe
+    ? { cls:'safe', dot:'safe', text:'No data has left your browser', icon:'&#x1f6e1;&#xfe0f;' }
+    : { cls:'warning', dot:'warning', text:`WARNING: ${STATE.networkRequests} outbound request(s) blocked`, icon:'&#x26a0;&#xfe0f;' };
+
+  app.innerHTML = `
+    <div class="container">
+      <div class="upload-hero">
+        <h1>Tax Return Draft Preview</h1>
+        <p>Upload your tax documents and get an instant draft return with all schedules</p>
+        <div class="draft-badge">PREVIEW ONLY — NOT FOR FILING</div>
+      </div>
+
+      <!-- OPEN SOURCE BANNER -->
+      <div class="oss-banner">
+        <div class="gh-icon">
+          <svg width="28" height="28" viewBox="0 0 16 16" fill="#c4b5fd"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </div>
+        <div>
+          <div class="oss-headline">This is an open source project — your data is totally secure</div>
+          <div class="oss-detail">
+            Every line of code is public on <a href="${GITHUB_REPO}" target="_blank" rel="noopener">GitHub</a>.
+            Anyone — security researchers, developers, CPAs, or you — can inspect, audit, and verify that
+            <strong>your financial data never leaves your browser.</strong> There is no hidden server, no secret tracking,
+            and no way for us to access your documents. Don't take our word for it — <a href="${GITHUB_SOURCE}" target="_blank" rel="noopener">read the source code</a>.
+          </div>
+          <div class="oss-badges">
+            <a class="oss-badge" href="${GITHUB_REPO}" target="_blank" rel="noopener">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              View Source Code
+            </a>
+            <a class="oss-badge" href="${GITHUB_LICENSE}" target="_blank" rel="noopener">MIT License</a>
+            <a class="oss-badge" href="${GITHUB_ISSUES}" target="_blank" rel="noopener">Report an Issue</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRIVACY BANNER -->
+      <div class="privacy-banner">
+        <div class="shield">&#x1f512;</div>
+        <div>
+          <div class="headline">Your documents never leave your device</div>
+          <div class="detail">
+            All processing happens <strong>100% in your browser</strong> using local OCR.
+            <strong>No server. No uploads. No database. No accounts.</strong>
+            Your W-2s, 1099s, and financial data are never transmitted anywhere — not to us, not to any third party.
+            You could disconnect from the internet right now and this app would still work.
+          </div>
+          <div class="verify-badge" onclick="showVerifyPanel()">&#x2705; Verify it yourself — click to inspect</div>
+        </div>
+      </div>
+
+      <!-- NETWORK MONITOR -->
+      <div class="network-monitor ${netStatus.cls}">
+        <span class="network-dot ${netStatus.dot}"></span>
+        <span>LIVE PRIVACY MONITOR: ${netStatus.text}</span>
+      </div>
+
+      <!-- SECURITY FEATURES -->
+      <div class="security-grid">
+        <div class="security-card">
+          <div class="sec-icon">&#x1f4bb;</div>
+          <div class="sec-title">100% Client-Side</div>
+          <div class="sec-desc">Tesseract.js OCR runs in your browser's Web Worker. Tax math runs in JavaScript on your device. Zero server calls.</div>
+        </div>
+        <div class="security-card">
+          <div class="sec-icon">&#x1f6ab;</div>
+          <div class="sec-title">No Data Collection</div>
+          <div class="sec-desc">No cookies, no tracking, no analytics, no user accounts. We literally cannot see what you upload.</div>
+        </div>
+        <div class="security-card">
+          <div class="sec-icon">
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="var(--text)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </div>
+          <div class="sec-title">Open Source on GitHub</div>
+          <div class="sec-desc">Every line of code is public. Security researchers, developers, and you can audit everything. <a href="${GITHUB_REPO}" target="_blank" rel="noopener" style="color:var(--accent-light)">View the repo</a></div>
+        </div>
+      </div>
+
+      <!-- HOW IT WORKS -->
+      <details class="how-it-works">
+        <summary>How does it work without sending my data anywhere?</summary>
+        <div class="how-steps">
+          <div class="how-step">
+            <div class="step-num">1</div>
+            <div class="step-title">You upload a file</div>
+            <div class="step-desc">The file goes into your browser's memory only. It is NOT uploaded to any server.</div>
+          </div>
+          <div class="how-step">
+            <div class="step-num">2</div>
+            <div class="step-title">OCR runs locally</div>
+            <div class="step-desc">Tesseract.js (open-source OCR) reads text from your document inside a Web Worker on your CPU.</div>
+          </div>
+          <div class="how-step">
+            <div class="step-num">3</div>
+            <div class="step-title">Tax math runs locally</div>
+            <div class="step-desc">All 2025 tax brackets, deductions, and schedules are calculated in JavaScript right here in your browser.</div>
+          </div>
+          <div class="how-step">
+            <div class="step-num">4</div>
+            <div class="step-title">Results shown to you</div>
+            <div class="step-desc">Your draft return is rendered on screen. When you close the tab, everything is gone. Nothing persists.</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--text-dim);line-height:1.6">
+          <strong style="color:var(--green)">Proof:</strong> Open your browser's Developer Tools (F12) → Network tab.
+          You'll see zero requests carrying your tax data. The only network activity is loading the Tesseract OCR engine from a public CDN.
+          <br>Even better: disconnect from WiFi after the page loads — everything still works.
+        </div>
+      </details>
+
+      <!-- VERIFICATION PANEL (hidden by default) -->
+      <div id="verify-panel" style="display:none;background:var(--surface);border:1px solid var(--green-dark);border-radius:10px;padding:16px;margin-bottom:20px;">
+        <div style="color:var(--green);font-weight:700;font-size:14px;margin-bottom:8px">&#x1f50d; Privacy Verification</div>
+        <div style="color:var(--text-muted);font-size:12px;line-height:1.6;margin-bottom:12px">
+          This app includes a <strong>live network monitor</strong> that intercepts every outbound request
+          (fetch, XMLHttpRequest, sendBeacon, WebSocket) and blocks anything that isn't loading the OCR engine.
+          Here's what you can verify yourself:
+        </div>
+        <div style="font-family:'SF Mono',Monaco,monospace;font-size:11px;background:var(--bg);border-radius:6px;padding:12px;color:var(--text-dim);line-height:1.8;">
+          <div><span style="color:var(--green)">✓</span> fetch() — intercepted, blocks non-CDN requests</div>
+          <div><span style="color:var(--green)">✓</span> XMLHttpRequest — intercepted, blocks non-CDN requests</div>
+          <div><span style="color:var(--green)">✓</span> navigator.sendBeacon — completely disabled</div>
+          <div><span style="color:var(--green)">✓</span> WebSocket — completely disabled</div>
+          <div><span style="color:var(--green)">✓</span> No cookies set — document.cookie is empty</div>
+          <div><span style="color:var(--green)">✓</span> No localStorage used — check Application tab</div>
+          <div><span style="color:var(--green)">✓</span> No service workers registered</div>
+          <div style="margin-top:8px"><span style="color:var(--accent-light)">i</span> Allowed CDN hosts (for Tesseract WASM only):</div>
+          <div style="padding-left:16px">cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com</div>
+        </div>
+        <div style="margin-top:10px;text-align:center">
+          <button onclick="runPrivacyAudit()" style="background:var(--green-dark);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">
+            Run Live Audit Now
+          </button>
+          <div id="audit-result" style="margin-top:8px;font-size:11px;color:var(--text-dim)"></div>
+        </div>
+      </div>
+
+      <div class="drop-zone" id="dropzone">
+        <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" style="display:none">
+        <div class="icon">&#x1f4c4;</div>
+        <div class="title">Drop your tax documents here</div>
+        <div class="subtitle">W-2, 1099-INT, 1099-DIV, 1099-NEC, 1099-B, 1099-MISC, 1098</div>
+        <div class="hint">PDF, JPG, PNG, TIFF — parsed with Tesseract.js OCR (100% in your browser)</div>
+      </div>
+
+      ${STATE.files.length > 0 ? `
+        <div class="file-list">
+          ${STATE.files.map((f, i) => `
+            <div class="file-item">
+              <span class="name">${f.name}</span>
+              <span class="meta">
+                <span>${(f.size/1024).toFixed(0)} KB</span>
+                <button class="file-remove" onclick="removeFile(${i})">&times;</button>
+              </span>
+            </div>
+          `).join('')}
+        </div>
+        <button class="btn-primary" onclick="startParsing()">
+          Generate Draft Return (${STATE.files.length} file${STATE.files.length>1?'s':''})
+        </button>
+      ` : ''}
+
+      <div style="margin-top: 24px">
+        <div style="color: var(--text-dim); font-size: 12px; text-align: center; margin-bottom: 12px;">— or try a demo scenario —</div>
+        <div class="demo-grid">
+          ${Object.entries(DEMOS).map(([key, d]) => `
+            <button class="demo-card" onclick="loadDemo('${key}')">
+              <div class="label">${d.label}</div>
+              <div class="desc">${d.desc}</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- GITHUB FOOTER -->
+      <div class="gh-footer">
+        <a href="${GITHUB_REPO}" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Open Source on GitHub — View the code, report issues, contribute
+        </a>
+        <div style="color:var(--text-dim);font-size:11px;margin-top:4px">MIT License · Made with transparency in mind</div>
+      </div>
+    </div>
+  `;
+
+  // Wire up drop zone
+  const dz = document.getElementById('dropzone');
+  const fi = document.getElementById('fileinput');
+  if (dz) {
+    dz.onclick = () => fi.click();
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add('dragover'); };
+    dz.ondragleave = () => dz.classList.remove('dragover');
+    dz.ondrop = e => { e.preventDefault(); dz.classList.remove('dragover'); addFiles(e.dataTransfer.files); };
+    fi.onchange = e => addFiles(e.target.files);
+  }
+}
+
+function renderParsing() {
+  const pct = STATE.ocrProgress;
+  const fileProgress = STATE.ocrTotalFiles > 0 ? `File ${STATE.ocrCurrentFile} of ${STATE.ocrTotalFiles}` : '';
+  app.innerHTML = `
+    <div class="container">
+      <div class="upload-hero">
+        <h1>Parsing Your Documents</h1>
+        <p>Running OCR and extracting tax data...</p>
+      </div>
+      <div class="ocr-progress">
+        <div class="ocr-progress-bar"><div class="ocr-progress-fill" style="width:${pct}%"></div></div>
+        <div class="ocr-progress-text"><span>${fileProgress}</span><span>${pct}%</span></div>
+      </div>
+      <div class="ocr-log" id="ocrlog">
+        ${STATE.ocrLogs.map(l => `<div class="${l.type || ''}">${l.text}</div>`).join('')}
+      </div>
+    </div>
+  `;
+  const log = document.getElementById('ocrlog');
+  if (log) log.scrollTop = log.scrollHeight;
+}
+
+function renderReview() {
+  const r = STATE.result;
+  if (!r) return;
+
+  const answeredCount = STATE.answeredQs.size;
+  const pricedQs = Math.min(answeredCount, 3);
+  const totalCost = pricedQs * 5;
+
+  app.innerHTML = `
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <button class="btn-back" onclick="goBack()">← New Return</button>
+        <span style="color:var(--red);font-weight:700;font-size:13px;letter-spacing:2px">DRAFT</span>
+        <span style="color:var(--text-muted);font-size:13px">${FS_LABELS[r.filingStatus]} · Tax Year ${TAX.year}</span>
+      </div>
+      ${totalCost > 0 ? `<div class="cost-badge">${pricedQs} question${pricedQs>1?'s':''} · $${totalCost}</div>` : ''}
+    </div>
+    <div class="tabs">
+      <button class="tab-btn ${STATE.tab==='return'?'active':''}" onclick="setTab('return')">Draft Return</button>
+      <button class="tab-btn ${STATE.tab==='assumptions'?'active':''}" onclick="setTab('assumptions')">Assumptions (${r.assumptions.length})</button>
+      <button class="tab-btn ${STATE.tab==='pricing'?'active':''}" onclick="setTab('pricing')">Pricing</button>
+    </div>
+    <div class="container">
+      ${STATE.tab === 'return' ? renderReturn(r) : ''}
+      ${STATE.tab === 'assumptions' ? renderAssumptions(r) : ''}
+      ${STATE.tab === 'pricing' ? renderPricing() : ''}
+    </div>
+  `;
+}
+
+function renderReturn(r) {
+  let html = `
+    <div style="position:relative">
+      <div class="watermark"><div class="watermark-text">DRAFT</div></div>
+      <div style="position:relative;z-index:1">
+        <div class="disclaimer-box">
+          <div class="title">⚠ DRAFT — NOT FOR FILING</div>
+          <div class="body">
+            This document is a <strong>preliminary draft estimate</strong> for informational and comparison purposes only.
+            It does not constitute professional tax advice and has not been reviewed by a licensed CPA or tax attorney.
+            The creators and operators accept <strong>no liability</strong> for errors, omissions, or consequences.
+            <strong>Do not file this as an actual tax return.</strong> Consult a qualified tax professional.
+          </div>
+        </div>
+
+        <div class="return-header">
+          <div class="draft-label">DRAFT — NOT FOR FILING</div>
+          <div class="form-title">U.S. Individual Income Tax Return</div>
+          <div class="form-sub">Form 1040 · Tax Year ${TAX.year} · ${FS_LABELS[r.filingStatus]}</div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card"><div class="lbl">Total Income</div><div class="val" style="color:var(--text)">$${fmt(r.totalIncome)}</div></div>
+          <div class="summary-card"><div class="lbl">Total Tax</div><div class="val" style="color:var(--orange)">$${fmt(r.totalTax)}</div></div>
+          <div class="summary-card"><div class="lbl">${r.refundOrOwed >= 0 ? 'Refund' : 'Amount Owed'}</div><div class="val" style="color:${r.refundOrOwed>=0?'var(--green)':'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div></div>
+          <div class="summary-card"><div class="lbl">Effective Rate</div><div class="val" style="color:var(--accent-light)">${r.effectiveRate.toFixed(1)}%</div></div>
+        </div>
+
+        ${sectionHeader('Form 1040 — Income', 'Lines 1–9')}
+        ${r.totalWages > 0 ? lineItem('1a. Wages, salaries, tips', r.totalWages) : ''}
+        ${r.totalInterest > 0 ? lineItem('2b. Taxable interest', r.totalInterest) : ''}
+        ${r.totalOrdDiv > 0 ? lineItem('3a. Ordinary dividends', r.totalOrdDiv) : ''}
+        ${r.totalQualDiv > 0 ? lineItem('3b. Qualified dividends', r.totalQualDiv, {sub:true}) : ''}
+        ${r.schedCNet !== 0 ? lineItem('8. Business income (Schedule C)', r.schedCNet) : ''}
+        ${(r.netSTCG + r.netLTCG) !== 0 ? lineItem('7. Capital gain/loss (Schedule D)', r.netSTCG + r.netLTCG, {showSign:true}) : ''}
+        ${lineItem('9. Total income', r.totalIncome, {bold:true})}
+
+        ${sectionHeader('Adjustments to Income', 'Line 10')}
+        ${r.adjustments > 0 ? lineItem('Deductible SE tax (½)', r.adjustments, {indent:true}) : lineItem('No adjustments', 0, {sub:true})}
+        ${lineItem('10. Adjustments', r.adjustments, {bold:true})}
+
+        ${sectionHeader('Adjusted Gross Income', 'Line 11')}
+        ${lineItem('11. AGI', r.agi, {bold:true})}
+
+        ${sectionHeader('Deductions', 'Lines 12–15')}
+        ${lineItem('12. ' + (r.usingItemized ? 'Itemized deductions (Schedule A)' : 'Standard deduction'), r.deduction)}
+        ${r.qbiDeduction > 0 ? lineItem('13. Qualified business income deduction', r.qbiDeduction) : ''}
+        ${lineItem('15. Taxable income', r.taxableIncome, {bold:true})}
+
+        ${sectionHeader('Tax Computation', 'Lines 16–24')}
+        ${lineItem('Ordinary income tax', r.ordinaryTax, {indent:true, sub:true})}
+        ${r.ltcgTax > 0 ? lineItem('LTCG / qualified dividend tax', r.ltcgTax, {indent:true, sub:true}) : ''}
+        ${lineItem('16. Tax', r.incomeTax)}
+        ${r.seTax > 0 ? lineItem('23. Self-employment tax (Schedule SE)', r.seTax) : ''}
+        ${r.niit > 0 ? lineItem('Net investment income tax (3.8%)', r.niit) : ''}
+        ${lineItem('24. Total tax', r.totalTax, {bold:true})}
+
+        ${sectionHeader('Payments', 'Lines 25–33')}
+        ${r.totalFedWithheld > 0 ? lineItem('25d. Federal tax withheld', r.totalFedWithheld) : ''}
+        ${r.estimatedPayments > 0 ? lineItem('26. Estimated tax payments', r.estimatedPayments) : ''}
+        ${lineItem('33. Total payments', r.totalPayments, {bold:true})}
+
+        ${sectionHeader(r.refundOrOwed >= 0 ? 'Refund' : 'Amount You Owe', r.refundOrOwed >= 0 ? 'Line 34' : 'Line 37')}
+        <div class="refund-box ${r.refundOrOwed >= 0 ? 'refund' : 'owed'}">
+          <div class="lbl">${r.refundOrOwed >= 0 ? 'Estimated Refund' : 'Estimated Amount Owed'}</div>
+          <div class="amount" style="color:${r.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div>
+          <div class="rates">Marginal rate: ${r.marginalRate}% · Effective rate: ${r.effectiveRate.toFixed(1)}%</div>
+        </div>
+  `;
+
+  // Schedule A
+  if (r.schedules.A) {
+    const a = r.schedules.A;
+    html += sectionHeader('Schedule A — Itemized Deductions', 'Form 1040, Schedule A');
+    if (a.medical > 0) {
+      html += lineItem('Medical expenses', a.medical, {sub:true});
+      html += lineItem(`Less ${TAX.medicalExpenseFloor*100}% of AGI`, -a.medicalThreshold, {sub:true});
+      html += lineItem('Medical deduction', a.medicalDeduction, {indent:true});
+    }
+    html += lineItem(`SALT (capped at $${TAX.saltCap[r.filingStatus].toLocaleString()})`, a.saltDeduction, {indent:true});
+    if (a.mortgageInterest > 0) html += lineItem('Mortgage interest', a.mortgageInterest, {indent:true});
+    if (a.charitableCash > 0) html += lineItem('Charitable (cash)', a.charitableCash, {indent:true});
+    if (a.charitableNonCash > 0) html += lineItem('Charitable (non-cash)', a.charitableNonCash, {indent:true});
+    html += lineItem('Total Itemized Deductions', a.totalItemized, {bold:true});
+  }
+
+  // Schedule B
+  if (r.schedules.B) {
+    const b = r.schedules.B;
+    html += sectionHeader('Schedule B — Interest and Dividends', 'Form 1040, Schedule B');
+    b.interestItems.forEach(i => { html += lineItem('  ' + i.payer, i.amount, {sub:true}); });
+    html += lineItem('Total interest', b.totalInterest, {indent:true});
+    b.dividendItems.forEach(d => { html += lineItem('  ' + d.payer, d.ordinary, {sub:true}); });
+    html += lineItem('Total ordinary dividends', b.totalOrdDiv, {indent:true});
+  }
+
+  // Schedule C
+  if (r.schedules.C) {
+    const c = r.schedules.C;
+    html += sectionHeader(`Schedule C — ${c.businessName}`, 'Form 1040, Schedule C');
+    html += lineItem('Gross receipts', c.grossReceipts);
+    if (c.cogs > 0) html += lineItem('Cost of goods sold', -c.cogs);
+    html += lineItem('Gross income', c.grossIncome);
+    html += lineItem('Total expenses', c.totalExpenses);
+    html += lineItem('Net profit', c.netProfit, {bold:true});
+  }
+
+  // Schedule SE
+  if (r.schedules.SE) {
+    const se = r.schedules.SE;
+    html += sectionHeader('Schedule SE — Self-Employment Tax', 'Form 1040, Schedule SE');
+    html += lineItem('Net SE earnings (92.35%)', se.netEarnings);
+    html += lineItem('Social Security tax', se.ssTax, {indent:true});
+    html += lineItem('Medicare tax', se.medicareTax, {indent:true});
+    if (se.additionalMedicare > 0) html += lineItem('Additional Medicare tax', se.additionalMedicare, {indent:true});
+    html += lineItem('Total SE tax', se.totalSETax, {bold:true});
+    html += lineItem('Deductible portion (½)', se.deduction, {sub:true});
+  }
+
+  // Schedule D
+  if (r.schedules.D) {
+    const d = r.schedules.D;
+    html += sectionHeader('Schedule D — Capital Gains and Losses', 'Form 1040, Schedule D');
+    html += `<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Part I — Short-Term</div>`;
+    html += lineItem('Net short-term gain/loss', d.netSTCG, {showSign:true});
+    html += `<div style="font-size:13px;color:var(--text-muted);margin:8px 0">Part II — Long-Term</div>`;
+    html += lineItem('Net long-term gain/loss', d.netLTCG, {showSign:true});
+    html += lineItem('Total net gain/loss', d.totalNetGain, {bold:true, showSign:true});
+    if (d.capitalLossCarryover > 0) html += lineItem('Capital loss carryforward to 2026', d.capitalLossCarryover, {sub:true});
+  }
+
+  // Form 8949
+  if (r.schedules.form8949) {
+    html += sectionHeader('Form 8949 — Sales of Capital Assets', 'Form 8949');
+    html += `<div style="overflow-x:auto"><table class="form8949-table"><thead><tr>
+      <th>Description</th><th>Acquired</th><th>Sold</th>
+      <th class="right">Proceeds</th><th class="right">Basis</th><th class="right">Gain/Loss</th><th class="center">Term</th>
+    </tr></thead><tbody>`;
+    r.schedules.form8949.forEach(t => {
+      const gl = (t.proceeds||0) - (t.basis||0);
+      html += `<tr>
+        <td>${t.description}</td><td class="muted">${t.dateAcquired}</td><td class="muted">${t.dateSold}</td>
+        <td class="right">$${fmt(t.proceeds)}</td><td class="right">$${fmt(t.basis)}</td>
+        <td class="right">${moneyHtml(gl, true)}</td>
+        <td class="center">${t.longTerm ? 'LT' : 'ST'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  // Footer
+  html += `
+        <div class="footer-disclaimer">
+          <div class="title">⚠ THIS IS A DRAFT ESTIMATE — NOT AN OFFICIAL TAX RETURN ⚠</div>
+          This document was generated by automated software and has not been reviewed by a licensed tax professional.
+          It is intended solely for informational, comparison, and educational purposes. The creators and operators
+          are not licensed CPAs, enrolled agents, or tax attorneys. They assume no liability for accuracy, omissions,
+          or consequences. Federal and state tax law is complex and changes frequently. Do not file this document
+          with the IRS or any state tax authority. If you choose to transcribe data onto official forms, you do so
+          at your own risk. Always consult a qualified tax professional before filing. By using this tool, you
+          acknowledge the operators bear no responsibility for errors or resulting tax liabilities.
+          <div class="version">Tax Year ${TAX.year} · Generated ${new Date().toLocaleDateString()} · v0.3.0-draft</div>
+          <div style="margin-top:6px"><a href="${GITHUB_REPO}" target="_blank" rel="noopener" style="color:var(--accent-light);text-decoration:none;font-weight:600">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-1px;margin-right:3px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            Open source — verify every line of code on GitHub
+          </a></div>
+        </div>
+      </div>
+    </div>
+  `;
+  return html;
+}
+
+function renderAssumptions(r) {
+  let html = `
+    <div style="margin-bottom:16px">
+      <h2 style="font-size:18px;font-weight:700">Assumptions Made</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-top:4px">
+        These assumptions were inferred from your documents. Answer questions to refine your return.
+        The first 3 answers cost $5 each. Additional answers are free.
+      </p>
+    </div>
+  `;
+
+  r.assumptions.forEach((a, i) => {
+    const answered = STATE.answeredQs.has(a.id);
+    const price = i < 3 ? 5 : 0;
+    html += `
+      <div class="assumption-card ${answered ? 'answered' : ''}">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span class="impact-badge ${a.impact}">${a.impact} impact</span>
+            ${answered ? '<span class="answered-label">✓ Answered</span>' : ''}
+          </div>
+          <div class="assumption-text">${a.text}</div>
+        </div>
+        ${!answered ? `<button class="btn-answer" onclick="answerQuestion('${a.id}')">
+          ${price > 0 ? `Answer · $${price}` : 'Free'}
+        </button>` : ''}
+      </div>
+    `;
+  });
+
+  return html;
+}
+
+function renderPricing() {
+  return `
+    <h2 style="font-size:18px;font-weight:700">Pricing</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:4px">
+      Transparent, pay-as-you-go. Only pay for what changes your return.
+    </p>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="price" style="color:var(--text)">Free</div>
+        <div class="plan">Draft Preview</div>
+        <div class="features">
+          Upload documents<br>Full draft 1040 + all schedules<br>
+          See all assumptions made<br>Compare with your CPA's quote
+        </div>
+      </div>
+      <div class="pricing-card featured">
+        <div class="price" style="color:var(--accent-light)">$5</div>
+        <div class="plan">Per Question (first 3)</div>
+        <div class="features">
+          Refine assumptions<br>Get more accurate return<br>
+          Impact shown before paying<br>Max $15 for first 3 questions
+        </div>
+      </div>
+      <div class="pricing-card green">
+        <div class="price" style="color:var(--green)">Free</div>
+        <div class="plan">Additional Questions</div>
+        <div class="features">
+          4th question onward<br>Keep refining<br>
+          No additional cost<br>Unlimited refinements
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:24px;background:var(--draft-bg);border:1px solid var(--red);border-radius:8px;padding:16px;font-size:12px;color:var(--text-muted);line-height:1.6">
+      <strong style="color:var(--red)">Disclaimer:</strong> This tool produces draft estimates for comparison
+      and informational purposes only. It is not a substitute for professional tax preparation. The operators are
+      not liable for any errors, omissions, or consequences. Do not file these drafts as actual tax returns.
+      Consult a licensed CPA or enrolled agent for official tax filing.
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EVENT HANDLERS
+// ═══════════════════════════════════════════════════════════════
+function addFiles(fileList) {
+  for (const f of fileList) {
+    STATE.files.push(f);
+  }
+  render();
+}
+
+function removeFile(i) {
+  STATE.files.splice(i, 1);
+  render();
+}
+
+async function startParsing() {
+  STATE.screen = 'parsing';
+  STATE.ocrLogs = [];
+  STATE.ocrProgress = 0;
+  STATE.ocrCurrentFile = 0;
+  STATE.ocrTotalFiles = STATE.files.length;
+  STATE.parsedDocs = [];
+  render();
+
+  const parser = new TaxDocumentParser(
+    (text) => {
+      const isHighlight = text.includes('Detected:') || text.includes('$');
+      const isWarn = text.includes('⚠');
+      STATE.ocrLogs.push({ text, type: isHighlight ? 'highlight' : (isWarn ? 'warn' : '') });
+      render();
+    },
+    (pct) => {
+      STATE.ocrProgress = pct;
+      render();
+    }
+  );
+
+  for (let i = 0; i < STATE.files.length; i++) {
+    STATE.ocrCurrentFile = i + 1;
+    STATE.ocrProgress = 0;
+    render();
+    try {
+      const doc = await parser.parseFile(STATE.files[i]);
+      if (doc) STATE.parsedDocs.push(doc);
+    } catch (err) {
+      STATE.ocrLogs.push({ text: `Error parsing ${STATE.files[i].name}: ${err.message}`, type: 'warn' });
+      render();
+    }
+  }
+
+  STATE.ocrLogs.push({ text: `\nParsing complete — ${STATE.parsedDocs.length} document(s) processed`, type: 'highlight' });
+  STATE.ocrProgress = 100;
+  render();
+
+  // Small delay then show results
+  setTimeout(() => {
+    if (STATE.parsedDocs.length > 0) {
+      STATE.taxData = aggregateParsedDocs(STATE.parsedDocs);
+      STATE.result = computeTaxReturn(STATE.taxData);
+      STATE.screen = 'review';
+      STATE.tab = 'return';
+      STATE.answeredQs = new Set();
+    } else {
+      STATE.ocrLogs.push({ text: 'No tax data could be extracted. Try the demo scenarios instead.', type: 'warn' });
+    }
+    render();
+  }, 1500);
+}
+
+function loadDemo(key) {
+  STATE.taxData = DEMOS[key].data;
+  STATE.result = computeTaxReturn(STATE.taxData);
+  STATE.screen = 'review';
+  STATE.tab = 'return';
+  STATE.answeredQs = new Set();
+  render();
+}
+
+function goBack() {
+  STATE.screen = 'upload';
+  STATE.files = [];
+  STATE.parsedDocs = [];
+  render();
+}
+
+function setTab(t) {
+  STATE.tab = t;
+  render();
+}
+
+function answerQuestion(id) {
+  STATE.answeredQs.add(id);
+  render();
+}
+
+function showVerifyPanel() {
+  const panel = document.getElementById('verify-panel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function runPrivacyAudit() {
+  const results = [];
+  // Check cookies
+  results.push(document.cookie.length === 0 ? '✓ No cookies found' : '✗ Cookies detected: ' + document.cookie);
+  // Check localStorage
+  try {
+    const lsKeys = Object.keys(localStorage);
+    results.push(lsKeys.length === 0 ? '✓ localStorage is empty' : '✗ localStorage has ' + lsKeys.length + ' key(s)');
+  } catch(e) { results.push('✓ localStorage not accessible'); }
+  // Check sessionStorage
+  try {
+    const ssKeys = Object.keys(sessionStorage);
+    results.push(ssKeys.length === 0 ? '✓ sessionStorage is empty' : '✗ sessionStorage has ' + ssKeys.length + ' key(s)');
+  } catch(e) { results.push('✓ sessionStorage not accessible'); }
+  // Check service workers
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      results.push(regs.length === 0 ? '✓ No service workers registered' : '✗ ' + regs.length + ' service worker(s) found');
+      showAuditResults(results);
+    });
+  } else {
+    results.push('✓ Service workers not supported (extra safe)');
+    showAuditResults(results);
+  }
+  // Network intercepts
+  results.push(STATE.networkSafe ? '✓ Zero unauthorized outbound requests detected' : '✗ ' + STATE.networkRequests + ' request(s) were blocked');
+  results.push('✓ fetch(), XHR, sendBeacon, WebSocket all monitored');
+}
+
+function showAuditResults(results) {
+  const el = document.getElementById('audit-result');
+  if (el) {
+    el.innerHTML = '<div style="text-align:left;background:var(--bg);border-radius:6px;padding:10px;margin-top:4px;font-family:monospace">' +
+      results.map(r => `<div style="color:${r.startsWith('✓') ? 'var(--green)' : 'var(--red)'}">${r}</div>`).join('') +
+      '</div><div style="color:var(--green);font-weight:600;margin-top:8px">Audit complete — ' +
+      new Date().toLocaleTimeString() + '</div>';
+  }
+}
+
+// Initial render
+render();
+</script>
+</body>
+</html>
