@@ -1911,17 +1911,20 @@ function renderUpload() {
         </button>
       ` : ''}
 
+      ${STATE.files.length === 0 ? `
       <div style="margin-top: 24px">
-        <div style="color: var(--text-dim); font-size: 12px; text-align: center; margin-bottom: 12px;">— or try a demo scenario —</div>
+        <div style="color: var(--text-dim); font-size: 12px; text-align: center; margin-bottom: 12px;">— or try with sample data (not your documents) —</div>
         <div class="demo-grid">
           ${Object.entries(DEMOS).map(([key, d]) => `
             <button class="demo-card" onclick="loadDemo('${key}')">
               <div class="label">${d.label}</div>
               <div class="desc">${d.desc}</div>
+              <div style="color:var(--text-dim);font-size:10px;margin-top:4px;font-style:italic">Sample data</div>
             </button>
           `).join('')}
         </div>
       </div>
+      ` : ''}
 
       <!-- FAQ -->
       <details style="margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0">
