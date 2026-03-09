@@ -585,7 +585,7 @@ class TaxDocumentParser {
   findAllMoney(text) {
     const amounts = [];
     // Require .XX decimal to distinguish dollar amounts from zip codes, EINs, SSNs
-    const re = /\$\s?(\d{1,3}(?:,\d{3})*\.\d{2})\b|(?<!\d[-\d])\b(\d{1,3}(?:,\d{3})*\.\d{2})\b/g;
+    const re = /\$\s?(\d{1,3}(?:,?\d{3})*\.\d{2})\b|(?<!\d[-\d])\b(\d{1,3}(?:,?\d{3})*\.\d{2})\b/g;
     let m;
     while ((m = re.exec(text)) !== null) {
       const raw = m[1] || m[2];
@@ -660,7 +660,7 @@ class TaxDocumentParser {
   parseW2TabLayout(text) {
     const lines = text.split('\n');
     let wages = 0, fedWithheld = 0, stateWithheld = 0;
-    const moneyRe = /\$?\s?(\d{1,3}(?:,\d{3})*\.\d{2})/;
+    const moneyRe = /(?<!\d)\$?\s?(\d{1,3}(?:,?\d{3})*\.\d{2})\b/;
 
     for (const line of lines) {
       if (!line.includes('\t')) continue;
@@ -668,7 +668,7 @@ class TaxDocumentParser {
 
       // Find all money amounts on this tab-separated line
       const amounts = [];
-      const amtRe = /\$?\s?(\d{1,3}(?:,\d{3})*\.\d{2})/g;
+      const amtRe = /(?<!\d)\$?\s?(\d{1,3}(?:,?\d{3})*\.\d{2})\b/g;
       let amtMatch;
       while ((amtMatch = amtRe.exec(line)) !== null) {
         amounts.push(parseFloat(amtMatch[1].replace(/,/g, '')));
@@ -692,7 +692,7 @@ class TaxDocumentParser {
   parseW2Lines(text) {
     const lines = text.split('\n');
     let wages = 0, fedWithheld = 0, stateWithheld = 0;
-    const moneyRe = /\$?\s?(\d{1,3}(?:,\d{3})*\.\d{2})/;
+    const moneyRe = /(?<!\d)\$?\s?(\d{1,3}(?:,?\d{3})*\.\d{2})\b/;
 
     const boxPatterns = [
       { field: 'wages', re: /(?:box\s*1\b|(?:^|\s)1\s+wages|wages[,.\s]*tips[,.\s]*other\s*comp)/i },
@@ -723,19 +723,19 @@ class TaxDocumentParser {
   // Strategy 3: Broad regex patterns across the full text
   parseW2Regex(text) {
     const wages = this.findMoney(text, [
-      /(?:box\s*1\b)[^A-Za-z\d$]*(?:wages[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
-      /wages[,.\s]*tips[,.\s]*other\s*comp\w*[^$\d]{0,30}[$\s]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
-      /wages[:\s$]+(\d{1,3}(?:,\d{3})*\.\d{2})/i,
+      /(?:box\s*1\b)[^A-Za-z\d$]*(?:wages[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /wages[,.\s]*tips[,.\s]*other\s*comp\w*[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /wages[:\s$]+(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
     ]);
     const fedWithheld = this.findMoney(text, [
-      /(?:box\s*2\b)[^A-Za-z\d$]*(?:federal[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
-      /federal\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
-      /(?:fed(?:eral)?)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
+      /(?:box\s*2\b)[^A-Za-z\d$]*(?:federal[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /federal\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /(?:fed(?:eral)?)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
     ]);
     const stateWithheld = this.findMoney(text, [
-      /(?:box\s*17\b)[^A-Za-z\d$]*(?:state[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
-      /state\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
-      /(?:state)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,\d{3})*\.\d{2})/i,
+      /(?:box\s*17\b)[^A-Za-z\d$]*(?:state[^$\d]{0,40})?[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /state\s*(?:income\s*)?tax\s*withheld[^$\d]{0,30}[$\s]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
+      /(?:state)\s*(?:with(?:held|holding)|w\/h)[:\s$]*(\d{1,3}(?:,?\d{3})*\.\d{2})/i,
     ]);
     return { wages, fedWithheld, stateWithheld };
   }
@@ -743,7 +743,7 @@ class TaxDocumentParser {
   parse1099INT(text) {
     this.onLog('Detected: Form 1099-INT (Interest Income)');
     const amount = this.findMoney(text, [
-      /(?:box\s*1|interest\s*income)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:box\s*1|interest\s*income)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
     ]);
     const payer = this.findPayer(text);
     if (amount === 0) {
@@ -757,11 +757,11 @@ class TaxDocumentParser {
   parse1099DIV(text) {
     this.onLog('Detected: Form 1099-DIV (Dividends)');
     const ordinary = this.findMoney(text, [
-      /(?:box\s*1a|total\s*ordinary\s*dividends)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
-      /ordinary\s*dividends\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:box\s*1a|total\s*ordinary\s*dividends)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+      /ordinary\s*dividends\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
     ]);
     const qualified = this.findMoney(text, [
-      /(?:box\s*1b|qualified\s*dividends)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:box\s*1b|qualified\s*dividends)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
     ]);
     const payer = this.findPayer(text);
     this.onLog(`  Ordinary: $${ordinary.toLocaleString()}, Qualified: $${qualified.toLocaleString()}`);
@@ -771,7 +771,7 @@ class TaxDocumentParser {
   parse1099NEC(text) {
     this.onLog('Detected: Form 1099-NEC (Nonemployee Compensation)');
     const amount = this.findMoney(text, [
-      /(?:box\s*1|nonemployee\s*compensation)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:box\s*1|nonemployee\s*compensation)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
     ]);
     const payer = this.findPayer(text);
     if (amount === 0) {
@@ -788,7 +788,7 @@ class TaxDocumentParser {
     // Try to find individual transaction lines
     const lines = text.split('\n');
     for (const line of lines) {
-      const m = line.match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+.*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/);
+      const m = line.match(/(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)\s+.*?(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/);
       if (m) {
         const v1 = parseFloat(m[1].replace(/,/g,''));
         const v2 = parseFloat(m[2].replace(/,/g,''));
@@ -806,10 +806,10 @@ class TaxDocumentParser {
     // Fallback: summary amounts
     if (transactions.length === 0) {
       const proceeds = this.findMoney(text, [
-        /(?:proceeds|gross\s*proceeds)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+        /(?:proceeds|gross\s*proceeds)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
       ]);
       const basis = this.findMoney(text, [
-        /(?:cost.*basis|basis)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+        /(?:cost.*basis|basis)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
       ]);
       if (proceeds > 0) {
         transactions.push({
@@ -826,8 +826,8 @@ class TaxDocumentParser {
 
   parse1099MISC(text) {
     this.onLog('Detected: Form 1099-MISC');
-    const rents = this.findMoney(text, [/(?:box\s*1|rents)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i]);
-    const other = this.findMoney(text, [/(?:box\s*3|other\s*income)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i]);
+    const rents = this.findMoney(text, [/(?:box\s*1|rents)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i]);
+    const other = this.findMoney(text, [/(?:box\s*3|other\s*income)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i]);
     const payer = this.findPayer(text);
     return { type: '1099misc', payer, rents, otherIncome: other };
   }
@@ -835,10 +835,10 @@ class TaxDocumentParser {
   parse1098(text) {
     this.onLog('Detected: Form 1098 (Mortgage Interest)');
     const interest = this.findMoney(text, [
-      /(?:box\s*1|mortgage\s*interest)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:box\s*1|mortgage\s*interest)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
     ]);
     const propertyTax = this.findMoney(text, [
-      /(?:box\s*10|property\s*tax)\D*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i,
+      /(?:box\s*10|property\s*tax)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
     ]);
     this.onLog(`  Mortgage interest: $${interest.toLocaleString()}`);
     return { type: '1098', mortgageInterest: interest, propertyTax };
