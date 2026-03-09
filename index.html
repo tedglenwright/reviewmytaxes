@@ -899,6 +899,41 @@ function renderReturn(r) {
     </div>
   </div>`;
 })()}
+        ${(() => {
+  // Tax bracket visualization
+  const brackets = TAX.brackets[r.filingStatus];
+  if (!brackets || r.taxableIncome <= 0) return '';
+  let html = '<div style="margin-top:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px">';
+  html += '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px">Your Tax Brackets</div>';
+  let prevLimit = 0;
+  for (let i = 0; i < brackets.length; i++) {
+    const [limit, rate] = brackets[i];
+    const bracketStart = prevLimit;
+    const bracketEnd = limit;
+    const bracketSize = bracketEnd - bracketStart;
+    const taxableInBracket = Math.min(Math.max(r.taxableIncome - bracketStart, 0), bracketSize);
+    const pct = Math.round(rate * 100);
+    const isCurrent = r.taxableIncome > bracketStart && r.taxableIncome <= bracketEnd;
+    const isPast = r.taxableIncome > bracketEnd;
+    const fillPct = bracketSize > 0 ? Math.min(100, (taxableInBracket / bracketSize) * 100) : 0;
+
+    if (taxableInBracket > 0 || isCurrent) {
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:11px">';
+      html += '<span style="width:32px;color:' + (isCurrent ? 'var(--accent-light)' : 'var(--text-dim)') + ';font-weight:' + (isCurrent ? '700' : '400') + ';text-align:right">' + pct + '%</span>';
+      html += '<div style="flex:1;height:8px;background:var(--surface-light);border-radius:4px;overflow:hidden;position:relative">';
+      html += '<div style="width:' + fillPct + '%;height:100%;background:' + (isCurrent ? 'var(--accent)' : 'var(--green)') + ';border-radius:4px;transition:width 0.3s"></div>';
+      html += '</div>';
+      html += '<span style="width:60px;color:' + (isCurrent ? 'var(--text)' : 'var(--text-dim)') + ';font-weight:' + (isCurrent ? '600' : '400') + ';text-align:right">$' + fmt(Math.round(taxableInBracket * rate)) + '</span>';
+      html += '</div>';
+    }
+    prevLimit = limit;
+  }
+  html += '<div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--surface-light);font-size:11px">';
+  html += '<span style="color:var(--text-muted)">Your top bracket: <strong style="color:var(--accent-light)">' + r.marginalRate + '%</strong></span>';
+  html += '<span style="color:var(--text-muted)">Next dollar taxed at <strong>' + r.marginalRate + '%</strong></span>';
+  html += '</div></div>';
+  return html;
+})()}
         ${r.refundOrOwed < 0 && r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
         <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
           <span style="font-size:14px">&#x1F4A1;</span> Refinements could reduce what you owe <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
@@ -2006,6 +2041,32 @@ function renderCompare(r) {
 
   html += '</div><div id="compare-result"></div>';
 
+  // Custom What-If calculator
+  html += `
+    <div style="margin-top:24px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:12px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">Custom What-If Calculator</h3>
+      <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px">Adjust values to see instant tax impact. All changes are temporary — your actual return is not affected.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:4px">Additional income (+/-)</label>
+          <input type="number" id="whatif-income" value="0" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit" onchange="runCustomWhatIf()">
+        </div>
+        <div>
+          <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:4px">Additional deductions (+/-)</label>
+          <input type="number" id="whatif-deductions" value="0" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit" onchange="runCustomWhatIf()">
+        </div>
+        <div>
+          <label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:4px">Additional withholding</label>
+          <input type="number" id="whatif-withholding" value="0" min="0" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit" onchange="runCustomWhatIf()">
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button onclick="runCustomWhatIf()" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;width:100%">Calculate</button>
+        </div>
+      </div>
+      <div id="whatif-result" style="margin-top:12px"></div>
+    </div>
+  `;
+
   // Year-over-year comparison
   html += `
     <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">
@@ -2130,6 +2191,58 @@ function runScenario(scenarioId) {
           stateRow +
         '</tbody></table>' +
     '</div></div>';
+}
+
+function runCustomWhatIf() {
+  const extraIncome = parseFloat(document.getElementById('whatif-income')?.value) || 0;
+  const extraDeductions = parseFloat(document.getElementById('whatif-deductions')?.value) || 0;
+  const extraWithholding = parseFloat(document.getElementById('whatif-withholding')?.value) || 0;
+
+  if (extraIncome === 0 && extraDeductions === 0 && extraWithholding === 0) {
+    const el = document.getElementById('whatif-result');
+    if (el) el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:8px">Enter values above and click Calculate</div>';
+    return;
+  }
+
+  const altData = JSON.parse(JSON.stringify(STATE.taxData));
+  // Add extra income as "other income"
+  altData.otherIncome = (altData.otherIncome || 0) + extraIncome;
+  // Add extra deductions via charitable
+  if (extraDeductions > 0) {
+    if (!altData.itemized) altData.itemized = { medical:0, stateTaxes:0, propertyTaxes:0, mortgageInterest:0, charitableCash:0, charitableNonCash:0 };
+    altData.itemized.charitableCash = (altData.itemized.charitableCash || 0) + extraDeductions;
+  }
+  // Add extra withholding
+  if (extraWithholding > 0 && altData.w2s && altData.w2s.length > 0) {
+    altData.w2s[0].fedWithheld = (altData.w2s[0].fedWithheld || 0) + extraWithholding;
+  } else if (extraWithholding > 0) {
+    altData.estimatedPayments = (altData.estimatedPayments || 0) + extraWithholding;
+  }
+
+  const altResult = computeTaxReturn(altData);
+  const current = STATE.result;
+  const diff = altResult.refundOrOwed - current.refundOrOwed;
+
+  const el = document.getElementById('whatif-result');
+  if (!el) return;
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;margin-top:8px">
+      <div style="text-align:center">
+        <div style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:1px">Current</div>
+        <div style="font-size:18px;font-weight:800;color:${current.refundOrOwed>=0?'var(--green)':'var(--red)'}">${current.refundOrOwed>=0?'Refund':'Owed'}: $${fmt(Math.abs(current.refundOrOwed))}</div>
+      </div>
+      <div style="font-size:20px;color:var(--text-dim)">→</div>
+      <div style="text-align:center">
+        <div style="color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:1px">What-If</div>
+        <div style="font-size:18px;font-weight:800;color:${altResult.refundOrOwed>=0?'var(--green)':'var(--red)'}">${altResult.refundOrOwed>=0?'Refund':'Owed'}: $${fmt(Math.abs(altResult.refundOrOwed))}</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:8px;padding:8px;border-radius:6px;font-size:13px;font-weight:700;${diff > 0 ? 'background:rgba(34,197,94,0.1);color:var(--green)' : diff < 0 ? 'background:rgba(239,68,68,0.1);color:var(--red)' : 'background:var(--surface-light);color:var(--text-muted)'}">
+      ${diff > 0 ? '+$' + fmt(diff) + ' better' : diff < 0 ? '-$' + fmt(Math.abs(diff)) + ' worse' : 'No change'}
+      <span style="font-size:11px;font-weight:400;opacity:0.8;margin-left:6px">(effective rate: ${altResult.effectiveRate.toFixed(1)}%)</span>
+    </div>
+  `;
 }
 
 function compareYoY() {
