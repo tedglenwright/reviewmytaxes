@@ -1023,6 +1023,10 @@ class TaxDocumentParser {
     if (upper.includes('SSA-1099') || upper.includes('SOCIAL SECURITY BENEFIT') || fname.includes('SSA') || fname.includes('1099SSA')) {
       return this.parseSSA1099(text);
     }
+    // 1099-SA
+    if (upper.includes('1099-SA') || upper.includes('HSA') && upper.includes('DISTRIBUTION') || fname.includes('1099SA') || fname.includes('1099-SA')) {
+      return this.parse1099SA(text);
+    }
     // 1098 Mortgage
     if (upper.includes('1098') || upper.includes('MORTGAGE INTEREST') || fname.includes('1098')) {
       return this.parse1098(text);
@@ -1448,6 +1452,21 @@ class TaxDocumentParser {
     return { type: 'ssa1099', netBenefits, fedWithheld };
   }
 
+  parse1099SA(text) {
+    this.onLog('Detected: Form 1099-SA (HSA/FSA/Archer MSA Distribution)');
+    const grossDist = this.findMoney(text, [
+      /(?:box\s*1|gross\s*distribution)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const earnings = this.findMoney(text, [
+      /(?:box\s*2|earnings)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const distributionCode = text.match(/(?:box\s*3|distribution\s*code)\D*(\d)/i)?.[1] || '1';
+    this.onLog(`  Gross distribution: $${grossDist.toLocaleString()}, Code: ${distributionCode}`);
+    // Code 1 = normal distribution (not taxable if used for qualified medical expenses)
+    // Code 2 = excess contributions
+    return { type: '1099sa', grossDistribution: grossDist, earnings, distributionCode };
+  }
+
   parseBestEffort(text) {
     const amounts = this.findAllMoney(text);
     if (amounts.length === 0) return null;
@@ -1500,6 +1519,10 @@ function aggregateParsedDocs(docs) {
         data.ssaBenefits = (data.ssaBenefits || 0) + (doc.netBenefits || 0);
         data.ssaWithheld = (data.ssaWithheld || 0) + (doc.fedWithheld || 0);
         if (doc._sourceURL) data._ssaSources = (data._ssaSources || []).concat({ _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName, netBenefits: doc.netBenefits });
+        break;
+      case '1099sa':
+        data.hsaDistributions = (data.hsaDistributions || 0) + (doc.grossDistribution || 0);
+        data.hsaDistributionCode = doc.distributionCode;
         break;
     }
   }
@@ -1775,7 +1798,32 @@ function computeTaxReturn(data) {
   const childTaxCredit = numChildren * 2000;
   const otherDepCredit = numOtherDeps * 500;
   const educationCredit = data.educationCredit || 0;
-  const eitcCredit = data.eitc || 0;
+  // Earned Income Tax Credit (EITC) - auto-calculate
+  let eitcCredit = 0;
+  const earnedIncome = totalWages + Math.max(0, schedCNet);
+  const numQualifyingChildren = data.numChildren || 0;
+
+  // 2025 EITC parameters (approximate)
+  const eitcParams = {
+    0: { maxCredit: 649, phaseInRate: 0.0765, phaseInEnd: 8490, phaseOutStart: { single: 10330, mfj: 17450 }, phaseOutRate: 0.0765 },
+    1: { maxCredit: 3733, phaseInRate: 0.34, phaseInEnd: 10980, phaseOutStart: { single: 21560, mfj: 28640 }, phaseOutRate: 0.1598 },
+    2: { maxCredit: 6164, phaseInRate: 0.40, phaseInEnd: 15410, phaseOutStart: { single: 21560, mfj: 28640 }, phaseOutRate: 0.2106 },
+    3: { maxCredit: 6935, phaseInRate: 0.45, phaseInEnd: 15410, phaseOutStart: { single: 21560, mfj: 28640 }, phaseOutRate: 0.2106 },
+  };
+  const eitcKids = Math.min(numQualifyingChildren, 3);
+  const ep = eitcParams[eitcKids];
+  if (ep && earnedIncome > 0) {
+    // Investment income limit: $11,600 for 2025
+    const investmentIncome = totalInterest + totalOrdDiv + Math.max(0, netSTCG + netLTCG);
+    if (investmentIncome <= 11600) {
+      const phaseIn = Math.min(earnedIncome * ep.phaseInRate, ep.maxCredit);
+      const phaseOutStart = ep.phaseOutStart[fs === 'mfj' ? 'mfj' : 'single'];
+      const phaseOutIncome = Math.max(agi, earnedIncome);
+      const phaseOut = Math.max(0, (phaseOutIncome - phaseOutStart) * ep.phaseOutRate);
+      eitcCredit = Math.max(0, Math.round(phaseIn - phaseOut));
+    }
+  }
+  if (data.eitc > 0) eitcCredit = data.eitc; // Manual override
   const childCareCredit = data.childCareCredit || 0;
   const saversCredit = data.saversCredit || 0;
   const energyCredit = data.energyCredit || 0;
@@ -1811,6 +1859,16 @@ function computeTaxReturn(data) {
   const totalPayments = totalFedWithheld + (data.estimatedPayments||0) + totalRefundableCredits + ptcReconciliation;
   const refundOrOwed = totalPayments - totalTax;
 
+  // Underpayment penalty estimate
+  let underpaymentPenalty = 0;
+  const requiredPayment = totalTax * 0.9; // Must pay 90% of current year tax
+  if (refundOrOwed < -1000 && totalPayments < requiredPayment) {
+    // Simplified penalty: ~8% annual rate on shortfall, prorated
+    const shortfall = requiredPayment - totalPayments;
+    underpaymentPenalty = Math.round(shortfall * 0.08 * 0.5); // ~6 months average
+    assumptions.push({ id:'underpayment', text:'Estimated underpayment penalty of $' + underpaymentPenalty.toLocaleString() + ' may apply — you may owe more than $1,000 without sufficient withholding', impact:'high' });
+  }
+
   // Default assumptions — always let user change filing status
   if (data.w2s && data.w2s.length >= 2) {
     assumptions.unshift({ id:'filing_status', text:`Assumed ${FS_LABELS[fs]} based on multiple W-2s — you can change this`, impact:'high' });
@@ -1818,10 +1876,14 @@ function computeTaxReturn(data) {
     assumptions.unshift({ id:'filing_status', text:`Assumed ${FS_LABELS[fs]} filing status — you can change this`, impact:'high' });
   }
   if (!data.dependents) assumptions.push({ id:'dependents', text:'Assumed no dependents — child tax credit ($2,000/child) not applied', impact:'high' });
-  if (!data.educationCredit && !data.eitc) assumptions.push({ id:'no_credits', text:'Did not apply education credits, child tax credit, or EITC', impact:'high' });
+  if (!data.educationCredit && !data.eitc && eitcCredit === 0) assumptions.push({ id:'no_credits', text:'Did not apply education credits, child tax credit, or EITC', impact:'high' });
+  if (!data.educationCredit && !data.eitc && eitcCredit > 0) assumptions.push({ id:'no_credits', text:'EITC of $' + eitcCredit.toLocaleString() + ' auto-calculated — education credits not applied', impact:'medium' });
   if (!data.childCareCredit && !data.saversCredit && !data.energyCredit) assumptions.push({ id:'other_credits', text:'Did not apply child care credit, retirement saver\'s credit, or energy credits', impact:'medium' });
   if ((data.estimatedPayments||0) === 0 && schedCNet > 0) assumptions.push({ id:'estimated_payments', text:'No estimated tax payments entered — if you made quarterly payments (1040-ES), add them to increase your refund', impact:'high' });
   if (!data.hsaContribution && !data.iraContribution && !data.studentLoanInterest) assumptions.push({ id:'no_hsa', text:'Did not account for HSA, IRA contributions, or student loan interest', impact:'medium' });
+  if (data.hsaDistributions > 0) {
+    assumptions.push({ id:'hsa_dist', text:'HSA distribution of $' + data.hsaDistributions.toLocaleString() + ' detected — assumed used for qualified medical expenses (not taxable). If not, this is taxable income + 20% penalty.', impact:'high' });
+  }
   if (!data.educatorExpenses && !data.alimonyPaid && !data.movingExpenses) assumptions.push({ id:'other_deductions', text:'Did not include educator expenses, alimony paid, or moving expenses', impact:'low' });
   if (!data.gamblingIncome && !data.alimonyReceived && !data.rentalIncome && !data.otherMiscIncome) assumptions.push({ id:'other_income', text:'Did not include other income: gambling, alimony, rental, jury duty, etc.', impact:'medium' });
   if (!data.scheduleE || data.scheduleE.length === 0) {
@@ -1860,7 +1922,7 @@ function computeTaxReturn(data) {
     qbiDeduction, taxableIncome, ordinaryTax, ltcgTax, incomeTax,
     seTax, niit, amt, ptcReconciliation, totalTax, totalFedWithheld, totalStateWithheld,
     estimatedPayments: data.estimatedPayments||0,
-    totalPayments, refundOrOwed, assumptions, schedules,
+    totalPayments, refundOrOwed, underpaymentPenalty, assumptions, schedules,
     stateResult,
     effectiveRate: totalIncome > 0 ? (totalTax / totalIncome * 100) : 0,
     marginalRate: (TAX.brackets[fs].find(([l]) => taxableIncome <= l)?.[1] * 100) || 37,
@@ -2481,7 +2543,7 @@ function renderParsing() {
       ${docsFound > 0 ? `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
         ${STATE.parsedDocs.map(d => {
-          const labels = { w2:'W-2', '1099int':'1099-INT', '1099div':'1099-DIV', '1099nec':'1099-NEC', '1099b':'1099-B', '1099misc':'1099-MISC', '1099r':'1099-R', '1098':'1098', 'ssa1099':'SSA-1099' };
+          const labels = { w2:'W-2', '1099int':'1099-INT', '1099div':'1099-DIV', '1099nec':'1099-NEC', '1099b':'1099-B', '1099misc':'1099-MISC', '1099r':'1099-R', '1098':'1098', 'ssa1099':'SSA-1099', '1099sa':'1099-SA' };
           return '<span style="padding:3px 8px;background:rgba(34,197,94,0.15);color:var(--green);border-radius:4px;font-size:11px;font-weight:600">' + (labels[d.type] || d.type) + '</span>';
         }).join('')}
       </div>
@@ -2511,6 +2573,7 @@ function renderReview() {
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         ${answeredCount > 0 ? `<div class="cost-badge">${answeredCount} refined · $${Math.ceil(answeredCount/3)*5}${PAID_QUESTIONS > 0 ? ' ('+PAID_QUESTIONS+' left)' : ''}</div>` : ''}
+        <button onclick="emailSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Email tax summary">Email</button>
         <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
@@ -2734,7 +2797,7 @@ function renderReturn(r) {
           return payHtml;
         })() : ''}
         ${r.estimatedPayments > 0 ? lineItem('26. Estimated tax payments', r.estimatedPayments) : ''}
-        ${r.schedules['3'].eitcCredit > 0 ? lineItem('27. Earned income credit (EITC)', r.schedules['3'].eitcCredit) : ''}
+        ${r.schedules['3'].eitcCredit > 0 ? lineItem('27. Earned income credit (EITC)', r.schedules['3'].eitcCredit) + '<div style="font-size:10px;color:var(--text-dim);padding:0 16px 4px;margin-top:-4px">Auto-calculated based on income & dependents</div>' : ''}
         ${r.schedules['8962'] ? (() => {
           const s = r.schedules['8962'];
           let ptcHtml = lineItem('Premium Tax Credit (Form 8962)', s.totalPTC);
@@ -2750,6 +2813,12 @@ function renderReturn(r) {
           <div class="amount" style="color:${r.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div>
           <div class="rates">Marginal rate: ${r.marginalRate}% · Effective rate: ${r.effectiveRate.toFixed(1)}%</div>
         </div>
+        ${r.underpaymentPenalty > 0 ? `
+        <div style="margin-top:8px;padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);display:flex;justify-content:space-between;align-items:center">
+          <span>Estimated underpayment penalty (Form 2210)</span>
+          <span style="font-weight:600">$${fmt(r.underpaymentPenalty)}</span>
+        </div>
+        ` : ''}
         ${r.refundOrOwed < 0 && r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
         <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
           <span style="font-size:14px">&#x1F4A1;</span> Refinements could reduce what you owe <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
@@ -2982,6 +3051,13 @@ function renderReturn(r) {
           <div style="font-size:24px;margin-bottom:6px">&#x1F5A8;&#xFE0F;</div>
           <div style="font-size:13px;font-weight:600;color:var(--accent-light)">Print This Draft</div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Save as PDF or print for your records</div>
+        </div>
+      </div>
+      <div class="assumption-card" style="cursor:pointer;text-align:center" onclick="showTaxCalendar()">
+        <div style="flex:1">
+          <div style="font-size:24px;margin-bottom:6px">&#x1f4c5;</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent-light)">Key Tax Dates</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Filing deadlines & payment schedule</div>
         </div>
       </div>
       <div class="assumption-card" style="cursor:pointer;text-align:center" onclick="goBack()">
@@ -4467,6 +4543,66 @@ function shareSummary() {
     ta.remove();
     showToast('Summary copied to clipboard', 'info');
   }
+}
+
+function showTaxCalendar() {
+  const r = STATE.result;
+  const year = TAX.year + 1; // Filing year
+  const owes = r && r.refundOrOwed < 0;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'source-modal-overlay';
+  overlay.id = 'calendar-modal';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML = `
+    <div class="source-modal" style="height:auto;max-height:85vh;max-width:520px">
+      <div class="source-modal-header">
+        <div><div class="title">Tax Year ${TAX.year} — Key Dates</div></div>
+        <button class="source-modal-close" onclick="document.getElementById('calendar-modal').remove()">×</button>
+      </div>
+      <div style="padding:20px;overflow-y:auto">
+        <div style="display:grid;gap:12px">
+          ${calendarItem('Apr 15, ' + year, 'Filing Deadline', 'Federal tax return due. Also Q1 estimated payment for ' + year + '.', owes ? 'var(--red)' : 'var(--green)')}
+          ${owes ? calendarItem('Apr 15, ' + year, 'Payment Due', 'You owe approximately $' + fmt(Math.abs(r.refundOrOwed)) + '. Pay by this date to avoid penalties and interest.', 'var(--red)') : ''}
+          ${calendarItem('Jun 16, ' + year, 'Q2 Estimated Payment', 'Second quarter estimated tax payment due for ' + year + '.', 'var(--text-dim)')}
+          ${calendarItem('Sep 15, ' + year, 'Q3 Estimated Payment', 'Third quarter estimated tax payment due for ' + year + '.', 'var(--text-dim)')}
+          ${calendarItem('Oct 15, ' + year, 'Extension Deadline', 'If you filed Form 4868, your extended return is due.', 'var(--orange)')}
+          ${calendarItem('Jan 15, ' + (year+1), 'Q4 Estimated Payment', 'Fourth quarter estimated tax payment due for ' + year + '.', 'var(--text-dim)')}
+        </div>
+        ${owes ? '<div style="margin-top:16px;padding:12px;background:rgba(239,68,68,0.1);border:1px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);line-height:1.5"><strong>Underpayment Warning:</strong> If you owe more than $1,000 and didn\'t pay enough through withholding or estimated payments, you may face an underpayment penalty. Consider making estimated payments to avoid this.</div>' : ''}
+        <div style="margin-top:16px;font-size:11px;color:var(--text-dim);text-align:center">
+          Dates may vary. Check IRS.gov for official deadlines.
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function calendarItem(date, title, desc, color) {
+  return '<div style="display:flex;gap:12px;align-items:flex-start"><div style="min-width:90px;font-size:12px;font-weight:700;color:' + color + '">' + date + '</div><div><div style="font-size:13px;font-weight:600">' + title + '</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + desc + '</div></div></div>';
+}
+
+function emailSummary() {
+  const r = STATE.result;
+  if (!r) return;
+  const subject = encodeURIComponent('Tax Return Draft Summary - TY' + TAX.year);
+  const body = encodeURIComponent([
+    'Tax Return Draft Summary (' + TAX.year + ')',
+    '',
+    'Filing: ' + FS_LABELS[r.filingStatus],
+    'Income: $' + fmt(r.totalIncome),
+    'AGI: $' + fmt(r.agi),
+    'Deductions: $' + fmt(r.deduction) + ' (' + (r.usingItemized ? 'Itemized' : 'Standard') + ')',
+    'Total Tax: $' + fmt(r.totalTax),
+    (r.refundOrOwed >= 0 ? 'Estimated Refund: $' + fmt(r.refundOrOwed) : 'Amount Owed: $' + fmt(Math.abs(r.refundOrOwed))),
+    r.stateResult && r.stateResult.tax > 0 ? r.stateResult.stateName + ' State Tax: $' + fmt(r.stateResult.tax) : '',
+    '',
+    'DRAFT — NOT FOR FILING',
+    'Generated at reviewmytaxes.com',
+  ].filter(Boolean).join('\n'));
+  window.open('mailto:?subject=' + subject + '&body=' + body);
 }
 
 function downloadSummary() {
