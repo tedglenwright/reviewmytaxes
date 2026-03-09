@@ -1654,6 +1654,27 @@ function renderUpload() {
         </div>
       </div>
 
+      <!-- TAX DEADLINE REMINDER -->
+      ${(() => {
+        const deadline = new Date(TAX.year + 1, 3, 15); // April 15 of following year
+        const now = new Date();
+        const daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0 && daysLeft <= 120) {
+          const urgency = daysLeft <= 14 ? 'var(--red)' : daysLeft <= 30 ? 'var(--orange)' : 'var(--yellow)';
+          return `<div style="background:rgba(234,179,8,0.08);border:1px solid ${urgency};border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:20px">&#x1f4c5;</span>
+              <div>
+                <div style="color:${urgency};font-weight:700;font-size:14px">${daysLeft} day${daysLeft !== 1 ? 's' : ''} until tax deadline</div>
+                <div style="color:var(--text-muted);font-size:12px">Federal taxes for ${TAX.year} are due April 15, ${TAX.year + 1}</div>
+              </div>
+            </div>
+            <div style="color:var(--text-dim);font-size:11px">Preview your return now to avoid surprises</div>
+          </div>`;
+        }
+        return '';
+      })()}
+
       <!-- OPEN SOURCE BANNER -->
       <div class="oss-banner">
         <div class="gh-icon">
@@ -2890,7 +2911,13 @@ function getAssumptionForm(id) {
             <input type="number" id="modal-charity-cash" min="0" step="100" value="${(STATE.taxData.itemized||{}).charitableCash || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;font-family:inherit">
             <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">Charitable contributions (non-cash):</label>
             <input type="number" id="modal-charity-noncash" min="0" step="100" value="${(STATE.taxData.itemized||{}).charitableNonCash || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            <div id="itemized-comparison" style="margin-top:12px;padding:10px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text-muted)">
+              Enter your deductions above. If itemized total exceeds the standard deduction ($${TAX.standardDeduction[STATE.taxData.filingStatus || 'single'].toLocaleString()}), itemizing saves you money.
+            </div>
           </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:11px;line-height:1.5">
+          <strong>Tip:</strong> Common itemized deductions include state income taxes, property taxes (SALT capped at $${TAX.saltCap[STATE.taxData.filingStatus || 'single'].toLocaleString()}), mortgage interest, and charitable donations. Most taxpayers benefit from the standard deduction.
         </div>
       `;
     case 'estimated_payments':
