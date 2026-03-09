@@ -136,8 +136,9 @@
   .summary-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 24px; }
   .summary-card {
     background: var(--surface); border-radius: 8px; padding: 12px; text-align: center;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border); transition: border-color 0.15s, background 0.15s;
   }
+  .summary-card.clickable:hover { border-color: var(--accent-light); background: rgba(139,92,246,0.08); }
   .summary-card .lbl { color: var(--text-dim); font-size: 11px; margin-bottom: 4px; }
   .summary-card .val { font-size: 22px; font-weight: 700; }
 
@@ -152,9 +153,38 @@
     display: flex; justify-content: space-between; padding: 4px 0;
     font-size: 14px; font-variant-numeric: tabular-nums;
   }
+  .line-item.clickable { cursor: pointer; border-radius: 4px; padding: 4px 6px; margin: 0 -6px; transition: background 0.15s; }
+  .line-item.clickable:hover { background: rgba(139,92,246,0.12); }
+  .line-item.clickable span:first-child::after { content: ' ↗'; font-size: 11px; color: var(--accent-light); opacity: 0.6; }
   .line-item.bold { font-weight: 700; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; }
   .line-item.indent { padding-left: 20px; }
   .line-item.sub { font-size: 12px; color: var(--text-dim); padding: 2px 0; }
+
+  .source-modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.8); z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    animation: fadeIn 0.15s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .source-modal {
+    background: var(--surface); border-radius: 12px; width: 90vw; max-width: 900px; height: 85vh;
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .source-modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .source-modal-header .title { font-weight: 700; font-size: 14px; color: var(--text); }
+  .source-modal-header .filename { font-size: 12px; color: var(--text-dim); }
+  .source-modal-header .close-btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .source-modal-header .close-btn:hover { background: var(--border); }
+  .source-modal-body { flex: 1; overflow: auto; }
+  .source-modal-body iframe, .source-modal-body img { width: 100%; height: 100%; border: none; }
+  .source-modal-body img { object-fit: contain; background: #fff; }
   .money { font-variant-numeric: tabular-nums; }
   .money.negative { color: var(--red); }
   .money.positive { color: var(--green); }
@@ -970,7 +1000,7 @@ function aggregateParsedDocs(docs) {
     if (!doc) continue;
     switch (doc.type) {
       case 'w2':
-        data.w2s.push({ employer: doc.employer, wages: doc.wages, fedWithheld: doc.fedWithheld, stateWithheld: doc.stateWithheld });
+        data.w2s.push({ employer: doc.employer, wages: doc.wages, fedWithheld: doc.fedWithheld, stateWithheld: doc.stateWithheld, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
         break;
       case '1099int':
         data.interest.push({ payer: doc.payer, amount: doc.amount });
@@ -1192,6 +1222,7 @@ function computeTaxReturn(data) {
 
   return {
     filingStatus: fs,
+    w2s: data.w2s || [],
     totalWages, totalInterest, totalOrdDiv, totalQualDiv,
     schedCNet, netSTCG, netLTCG, capitalLossCarryover,
     totalIncome, adjustments, agi, deduction, usingItemized,
@@ -1273,6 +1304,7 @@ let STATE = {
   screen: 'upload', // upload | parsing | review
   files: [],
   parsedDocs: [],
+  sourceFileURLs: [], // object URLs for uploaded files, parallel to parsedDocs
   taxData: null,
   result: null,
   tab: 'return',
@@ -1351,13 +1383,70 @@ function moneyHtml(amount, showSign) {
 }
 
 function lineItem(label, amount, opts = {}) {
-  const cls = [opts.bold?'bold':'', opts.indent?'indent':'', opts.sub?'sub':''].filter(Boolean).join(' ');
-  return `<div class="line-item ${cls}"><span>${label}</span>${moneyHtml(amount, opts.showSign)}</div>`;
+  const cls = [opts.bold?'bold':'', opts.indent?'indent':'', opts.sub?'sub':'', opts.onClick?'clickable':''].filter(Boolean).join(' ');
+  const clickAttr = opts.onClick ? ` onclick="${opts.onClick}"` : '';
+  return `<div class="line-item ${cls}"${clickAttr}><span>${label}</span>${moneyHtml(amount, opts.showSign)}</div>`;
 }
 
 function sectionHeader(title, ref) {
   return `<div class="section-header"><span class="title">${title}</span>${ref ? `<span class="ref">${ref}</span>` : ''}</div>`;
 }
+
+function showSourceDoc(docIndex) {
+  const r = STATE.result;
+  if (!r || !r.w2s || !r.w2s[docIndex]) return;
+  const w2 = r.w2s[docIndex];
+  if (!w2._sourceURL) return;
+
+  const fileName = w2._sourceFileName || 'Source Document';
+  const isImage = /\.(png|jpg|jpeg|gif|bmp|webp|heic)$/i.test(fileName);
+  const isPdf = /\.pdf$/i.test(fileName);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'source-modal-overlay';
+  overlay.id = 'source-modal';
+  overlay.onclick = (e) => { if (e.target === overlay) closeSourceDoc(); };
+
+  let bodyContent;
+  if (isPdf) {
+    bodyContent = `<iframe src="${w2._sourceURL}#toolbar=1"></iframe>`;
+  } else if (isImage) {
+    bodyContent = `<img src="${w2._sourceURL}" alt="${fileName}">`;
+  } else {
+    bodyContent = `<iframe src="${w2._sourceURL}"></iframe>`;
+  }
+
+  overlay.innerHTML = `
+    <div class="source-modal">
+      <div class="source-modal-header">
+        <div>
+          <div class="title">Source Document: W-2</div>
+          <div class="filename">${fileName} — ${w2.employer || 'Unknown employer'}</div>
+        </div>
+        <button class="close-btn" onclick="closeSourceDoc()">Close</button>
+      </div>
+      <div class="source-modal-body">${bodyContent}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function showAllSourceDocs() {
+  const r = STATE.result;
+  if (!r || !r.w2s) return;
+  // Show the first W-2 that has a source URL
+  const idx = r.w2s.findIndex(w => w._sourceURL);
+  if (idx >= 0) showSourceDoc(idx);
+}
+
+function closeSourceDoc() {
+  const el = document.getElementById('source-modal');
+  if (el) el.remove();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSourceDoc();
+});
 
 function render() {
   if (STATE.screen === 'upload') renderUpload();
@@ -1637,14 +1726,14 @@ function renderReturn(r) {
         </div>
 
         <div class="summary-grid">
-          <div class="summary-card"><div class="lbl">Total Income</div><div class="val" style="color:var(--text)">$${fmt(r.totalIncome)}</div></div>
+          <div class="summary-card${r.w2s.some(w=>w._sourceURL) ? ' clickable' : ''}" ${r.w2s.some(w=>w._sourceURL) ? 'onclick="showAllSourceDocs()" style="cursor:pointer"' : ''}><div class="lbl">Total Income</div><div class="val" style="color:var(--text)">$${fmt(r.totalIncome)}</div></div>
           <div class="summary-card"><div class="lbl">Total Tax</div><div class="val" style="color:var(--orange)">$${fmt(r.totalTax)}</div></div>
           <div class="summary-card"><div class="lbl">${r.refundOrOwed >= 0 ? 'Refund' : 'Amount Owed'}</div><div class="val" style="color:${r.refundOrOwed>=0?'var(--green)':'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div></div>
           <div class="summary-card"><div class="lbl">Effective Rate</div><div class="val" style="color:var(--accent-light)">${r.effectiveRate.toFixed(1)}%</div></div>
         </div>
 
         ${sectionHeader('Form 1040 — Income', 'Lines 1–9')}
-        ${r.totalWages > 0 ? lineItem('1a. Wages, salaries, tips', r.totalWages) : ''}
+        ${r.totalWages > 0 ? lineItem('1a. Wages, salaries, tips', r.totalWages, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''}) : ''}
         ${r.totalInterest > 0 ? lineItem('2b. Taxable interest', r.totalInterest) : ''}
         ${r.totalOrdDiv > 0 ? lineItem('3a. Ordinary dividends', r.totalOrdDiv) : ''}
         ${r.totalQualDiv > 0 ? lineItem('3b. Qualified dividends', r.totalQualDiv, {sub:true}) : ''}
@@ -1673,7 +1762,7 @@ function renderReturn(r) {
         ${lineItem('24. Total tax', r.totalTax, {bold:true})}
 
         ${sectionHeader('Payments', 'Lines 25–33')}
-        ${r.totalFedWithheld > 0 ? lineItem('25d. Federal tax withheld', r.totalFedWithheld) : ''}
+        ${r.totalFedWithheld > 0 ? lineItem('25d. Federal tax withheld', r.totalFedWithheld, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''}) : ''}
         ${r.estimatedPayments > 0 ? lineItem('26. Estimated tax payments', r.estimatedPayments) : ''}
         ${lineItem('33. Total payments', r.totalPayments, {bold:true})}
 
@@ -1884,6 +1973,7 @@ async function startParsing() {
   STATE.ocrCurrentFile = 0;
   STATE.ocrTotalFiles = STATE.files.length;
   STATE.parsedDocs = [];
+  STATE.sourceFileURLs = [];
   render();
 
   const parser = new TaxDocumentParser(
@@ -1905,7 +1995,11 @@ async function startParsing() {
     render();
     try {
       const doc = await parser.parseFile(STATE.files[i]);
-      if (doc) STATE.parsedDocs.push(doc);
+      if (doc) {
+        doc._sourceURL = URL.createObjectURL(STATE.files[i]);
+        doc._sourceFileName = STATE.files[i].name;
+        STATE.parsedDocs.push(doc);
+      }
     } catch (err) {
       const msg = err && err.message ? err.message : String(err);
       STATE.ocrLogs.push({ text: `Error parsing ${STATE.files[i].name}: ${msg}`, type: 'warn' });
@@ -1945,9 +2039,14 @@ function loadDemo(key) {
 }
 
 function goBack() {
+  // Revoke object URLs to free memory
+  if (STATE.result && STATE.result.w2s) {
+    STATE.result.w2s.forEach(w => { if (w._sourceURL) URL.revokeObjectURL(w._sourceURL); });
+  }
   STATE.screen = 'upload';
   STATE.files = [];
   STATE.parsedDocs = [];
+  STATE.sourceFileURLs = [];
   render();
 }
 
