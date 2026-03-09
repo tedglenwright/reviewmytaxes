@@ -80,7 +80,8 @@ let STATE = {
 function saveTaxData() {
   try {
     localStorage.setItem('rmt_taxData', JSON.stringify(STATE.taxData));
-    localStorage.setItem('rmt_screen', STATE.screen);
+    // Only persist 'review' — never save transient states like 'parsing'
+    localStorage.setItem('rmt_screen', STATE.screen === 'review' ? 'review' : 'upload');
   } catch(e) { console.warn('Could not save state:', e); }
 }
 

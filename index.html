@@ -3054,8 +3054,9 @@ document.addEventListener('keydown', (e) => {
 loadAnswered();
 if (loadTaxData() && STATE.taxData) {
   STATE.result = computeTaxReturn(STATE.taxData);
-  STATE.screen = localStorage.getItem('rmt_screen') || 'upload';
-  if (STATE.screen === 'review') STATE.screen = 'review';
+  const savedScreen = localStorage.getItem('rmt_screen') || 'upload';
+  // Only restore 'review' — never restore 'parsing' or other transient states
+  STATE.screen = (savedScreen === 'review') ? 'review' : 'upload';
 }
 
 // Initial render
