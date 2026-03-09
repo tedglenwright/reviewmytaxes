@@ -1,6 +1,23 @@
 // ReviewMyTaxes — Document Parser (only loaded on upload page)
 
 // ═══════════════════════════════════════════════════════════════
+// LAZY-LOAD TESSERACT.JS (only when OCR is actually needed)
+// ═══════════════════════════════════════════════════════════════
+let _tesseractLoading = null;
+async function ensureTesseract() {
+  if (typeof Tesseract !== 'undefined') return;
+  if (_tesseractLoading) return _tesseractLoading;
+  _tesseractLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Tesseract.js OCR engine'));
+    document.head.appendChild(script);
+  });
+  return _tesseractLoading;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // OCR DOCUMENT PARSER
 // ═══════════════════════════════════════════════════════════════
 class TaxDocumentParser {
@@ -55,6 +72,7 @@ class TaxDocumentParser {
         await page.render({ canvasContext: ctx, viewport }).promise;
 
         const imageDataUrl = canvas.toDataURL('image/png');
+        await ensureTesseract();
         const ocrResult = await Tesseract.recognize(imageDataUrl, 'eng', {
           logger: m => {
             if (m.status === 'recognizing text') {
@@ -163,6 +181,8 @@ class TaxDocumentParser {
     this.onLog('Processing image file with OCR...');
     const url = URL.createObjectURL(file);
     try {
+      this.onLog('Loading Tesseract OCR engine...');
+      await ensureTesseract();
       this.onLog('Initializing Tesseract OCR engine...');
       const result = await Tesseract.recognize(url, 'eng', {
         logger: m => {
