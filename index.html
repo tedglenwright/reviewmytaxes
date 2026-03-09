@@ -1010,46 +1010,7 @@ function renderReturn(r) {
     </div>
   `;
 
-  // Tax Savings Tips (personalized based on user's situation)
-  const tips = [];
-  if (!STATE.taxData.hsaContribution && !STATE.answeredQs.has('no_hsa')) {
-    tips.push({ icon: '&#x1f3e5;', title: 'HSA Contributions', text: `Contributing to an HSA could reduce your taxable income by up to $${(r.filingStatus === 'mfj' ? 8550 : 4300).toLocaleString()}.` });
-  }
-  if (!STATE.taxData.iraContribution && !STATE.answeredQs.has('no_hsa')) {
-    tips.push({ icon: '&#x1f4b0;', title: 'IRA Contributions', text: 'A Traditional IRA contribution (up to $7,000) reduces your taxable income directly.' });
-  }
-  if (!STATE.taxData.dependents && !STATE.answeredQs.has('dependents')) {
-    tips.push({ icon: '&#x1f476;', title: 'Child Tax Credit', text: 'If you have children under 17, the $2,000/child credit could significantly reduce your tax.' });
-  }
-  if (r.schedCNet > 0 && r.schedules.C && r.schedules.C.totalExpenses === 0) {
-    tips.push({ icon: '&#x1f4bc;', title: 'Business Expenses', text: 'You have self-employment income but no expenses deducted. Home office, supplies, mileage, and internet may be deductible.' });
-  }
-  if (!r.usingItemized && r.totalStateWithheld > 0) {
-    const potentialSalt = Math.min(r.totalStateWithheld, TAX.saltCap[r.filingStatus]);
-    tips.push({ icon: '&#x1f3e0;', title: 'Itemized Deductions', text: `Your state taxes ($${fmt(r.totalStateWithheld)}) alone may push you toward itemizing if you also have mortgage interest or charitable contributions.` });
-  }
-  if (r.marginalRate >= 24 && !STATE.taxData.educationCredit) {
-    tips.push({ icon: '&#x1f393;', title: 'Education Credits', text: 'If you or a dependent are in college, the AOTC ($2,500) or LLC ($2,000) could help.' });
-  }
-
-  if (tips.length > 0) {
-    html += sectionHeader('Potential Tax Savings', 'Based on your return');
-    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-bottom:16px">`;
-    tips.forEach(tip => {
-      html += `
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer" onclick="setTab('assumptions')">
-          <div style="display:flex;gap:8px;align-items:flex-start">
-            <div style="font-size:20px;flex-shrink:0">${tip.icon}</div>
-            <div>
-              <div style="font-size:13px;font-weight:600;color:var(--green)">${tip.title}</div>
-              <div style="font-size:11px;color:var(--text-dim);margin-top:4px;line-height:1.4">${tip.text}</div>
-            </div>
-          </div>
-        </div>
-      `;
-    });
-    html += `</div>`;
-  }
+  // (Tax savings tips are shown in the newer section below, after Important Notices)
 
   // Schedule A
   if (r.schedules.A) {
@@ -1272,14 +1233,14 @@ function renderReturn(r) {
 
   // Personalized Tax Savings Tips
   const tips = [];
-  if (!STATE.taxData.iraContribution && r.agi > 30000 && r.agi < TAX.iraDeductionLimit?.[fs]?.full || 999999) {
+  if (!STATE.taxData.iraContribution && r.agi > 30000) {
     const savingsEstimate = Math.round(7000 * r.marginalRate / 100);
     tips.push({ title: 'Traditional IRA Contribution', text: `Contributing $7,000 to a Traditional IRA could save ~$${fmt(savingsEstimate)} in taxes.`, action: 'compare', scenario: 'ira' });
   }
   if (!STATE.taxData.hsaContribution && r.totalWages > 20000) {
-    const hsaLimit = fs === 'mfj' ? 8550 : 4300;
+    const hsaLimit = r.filingStatus === 'mfj' ? 8550 : 4300;
     const savingsEstimate = Math.round(hsaLimit * r.marginalRate / 100);
-    tips.push({ title: 'HSA Contribution', text: `A max HSA contribution ($${fmt(hsaLimit)}) could save ~$${fmt(savingsEstimate)} in taxes, plus grows tax-free.`, action: 'compare', scenario: fs === 'mfj' ? 'hsa_family' : 'hsa_single' });
+    tips.push({ title: 'HSA Contribution', text: `A max HSA contribution ($${fmt(hsaLimit)}) could save ~$${fmt(savingsEstimate)} in taxes, plus grows tax-free.`, action: 'compare', scenario: r.filingStatus === 'mfj' ? 'hsa_family' : 'hsa_single' });
   }
   if (!r.usingItemized && STATE.taxData.itemized && (STATE.taxData.itemized.mortgageInterest || 0) > 0) {
     tips.push({ title: 'Check Itemized Deductions', text: `You have mortgage interest but still use the standard deduction. Review if itemizing saves more.`, action: 'tab', tab: 'compare' });
