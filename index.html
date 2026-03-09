@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tax Return Draft Preview — 2025</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
 <style>
   :root {
@@ -363,6 +365,81 @@ class TaxDocumentParser {
 
   async parseFile(file) {
     this.onLog(`Parsing: ${file.name}`);
+    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (isPDF) {
+      return this.parsePDF(file);
+    } else {
+      return this.parseImage(file);
+    }
+  }
+
+  async parsePDF(file) {
+    this.onLog('Detected PDF — converting pages to images for OCR...');
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    this.onLog(`PDF has ${numPages} page(s)`);
+
+    let allText = '';
+
+    for (let i = 1; i <= numPages; i++) {
+      this.onLog(`Rendering page ${i} of ${numPages}...`);
+      this.onProgress(Math.round((i - 1) / numPages * 30));
+
+      const page = await pdf.getPage(i);
+
+      // First try to extract text directly from the PDF (works for digital/typed PDFs)
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+
+      if (pageText.trim().length > 50) {
+        // PDF has embedded text — no OCR needed for this page
+        this.onLog(`Page ${i}: extracted ${pageText.length} chars directly (no OCR needed)`);
+        allText += pageText + '\n';
+      } else {
+        // Scanned/image PDF — render to canvas and OCR
+        this.onLog(`Page ${i}: scanned image detected — running OCR...`);
+        const scale = 2.5; // higher = better OCR accuracy
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        const imageDataUrl = canvas.toDataURL('image/png');
+        const ocrResult = await Tesseract.recognize(imageDataUrl, 'eng', {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const pagePct = 30 + ((i - 1) / numPages * 70) + (m.progress / numPages * 70);
+              this.onProgress(Math.round(Math.min(pagePct, 99)));
+            }
+          }
+        });
+        this.onLog(`Page ${i}: OCR extracted ${ocrResult.data.text.length} chars`);
+        allText += ocrResult.data.text + '\n';
+
+        // Clean up
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    }
+
+    this.onLog(`Total extracted: ${allText.length} characters from ${numPages} page(s)`);
+    this.onProgress(100);
+
+    if (allText.trim().length < 10) {
+      this.onLog('⚠ Very little text extracted — the PDF may be encrypted or image-quality too low');
+      return null;
+    }
+
+    return this.classifyAndExtract(allText, file.name);
+  }
+
+  async parseImage(file) {
+    this.onLog('Processing image file with OCR...');
     const url = URL.createObjectURL(file);
     try {
       this.onLog('Initializing Tesseract OCR engine...');
@@ -933,7 +1010,7 @@ let STATE = {
 // ═══════════════════════════════════════════════════════════════
 const _origFetch = window.fetch;
 const _origXHROpen = XMLHttpRequest.prototype.open;
-const ALLOWED_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com']; // only for Tesseract WASM
+const ALLOWED_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com']; // only for Tesseract WASM + PDF.js
 
 window.fetch = function(...args) {
   const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
@@ -1135,7 +1212,7 @@ function renderUpload() {
           <div><span style="color:var(--green)">✓</span> No cookies set — document.cookie is empty</div>
           <div><span style="color:var(--green)">✓</span> No localStorage used — check Application tab</div>
           <div><span style="color:var(--green)">✓</span> No service workers registered</div>
-          <div style="margin-top:8px"><span style="color:var(--accent-light)">i</span> Allowed CDN hosts (for Tesseract WASM only):</div>
+          <div style="margin-top:8px"><span style="color:var(--accent-light)">i</span> Allowed CDN hosts (for Tesseract OCR + PDF.js only):</div>
           <div style="padding-left:16px">cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com</div>
         </div>
         <div style="margin-top:10px;text-align:center">
@@ -1151,7 +1228,7 @@ function renderUpload() {
         <div class="icon">&#x1f4c4;</div>
         <div class="title">Drop your tax documents here</div>
         <div class="subtitle">W-2, 1099-INT, 1099-DIV, 1099-NEC, 1099-B, 1099-MISC, 1098</div>
-        <div class="hint">PDF, JPG, PNG, TIFF — parsed with Tesseract.js OCR (100% in your browser)</div>
+        <div class="hint">PDF, JPG, PNG, TIFF — parsed with PDF.js + Tesseract.js OCR (100% in your browser)</div>
       </div>
 
       ${STATE.files.length > 0 ? `
@@ -1550,7 +1627,11 @@ async function startParsing() {
       const doc = await parser.parseFile(STATE.files[i]);
       if (doc) STATE.parsedDocs.push(doc);
     } catch (err) {
-      STATE.ocrLogs.push({ text: `Error parsing ${STATE.files[i].name}: ${err.message}`, type: 'warn' });
+      const msg = err && err.message ? err.message : String(err);
+      STATE.ocrLogs.push({ text: `Error parsing ${STATE.files[i].name}: ${msg}`, type: 'warn' });
+      if (STATE.files[i].name.toLowerCase().endsWith('.pdf')) {
+        STATE.ocrLogs.push({ text: 'Tip: If this PDF is password-protected or encrypted, try exporting it as an unprotected PDF first.', type: 'warn' });
+      }
       render();
     }
   }
