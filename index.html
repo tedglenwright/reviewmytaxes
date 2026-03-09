@@ -3082,10 +3082,56 @@ if (PENDING_QUESTION_ID && STATE.screen === 'review' && PAID_QUESTIONS > 0) {
   const pendingId = PENDING_QUESTION_ID;
   localStorage.removeItem('rmt_pending_question');
   PENDING_QUESTION_ID = null;
-  // Switch to assumptions tab and open the question
   STATE.tab = 'assumptions';
   render();
   setTimeout(() => answerQuestion(pendingId), 300);
+}
+
+// If there's a pending question but no credit (Stripe redirect failed), show fallback banner
+const stuckPendingId = localStorage.getItem('rmt_pending_question');
+if (stuckPendingId && PAID_QUESTIONS <= 0 && STATE.screen === 'review') {
+  rlog('STRIPE_REDIRECT_FAILED', { pendingQuestion: stuckPendingId, credits: PAID_QUESTIONS });
+  showPaymentReturnBanner(stuckPendingId);
+}
+
+function showPaymentReturnBanner(questionId) {
+  const banner = document.createElement('div');
+  banner.id = 'payment-return-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#22c55e,#16a34a);padding:12px 20px;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:0 4px 20px rgba(0,0,0,0.3)';
+  banner.innerHTML = `
+    <span style="color:#fff;font-size:14px;font-weight:600">Just completed your $5 payment?</span>
+    <button onclick="confirmPaymentReturn('${questionId}')" style="padding:8px 20px;background:#fff;color:#16a34a;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Yes — open my question</button>
+    <button onclick="dismissPaymentBanner()" style="padding:8px 12px;background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">Dismiss</button>
+  `;
+  document.body.appendChild(banner);
+}
+
+function confirmPaymentReturn(questionId) {
+  rlog('MANUAL_PAYMENT_CONFIRM', questionId);
+  // Grant the credit manually
+  const existing = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
+  const currentPaid = (existing.paidQuestions || 0);
+  const currentUsed = (existing.usedQuestions || 0);
+  localStorage.setItem('rmt_payment', JSON.stringify({
+    paidQuestions: currentPaid + 1,
+    usedQuestions: currentUsed,
+    timestamp: Date.now()
+  }));
+  PAID_QUESTIONS = (currentPaid + 1) - currentUsed;
+  localStorage.removeItem('rmt_pending_question');
+  // Remove banner
+  const banner = document.getElementById('payment-return-banner');
+  if (banner) banner.remove();
+  // Open the question
+  STATE.tab = 'assumptions';
+  render();
+  setTimeout(() => answerQuestion(questionId), 300);
+}
+
+function dismissPaymentBanner() {
+  localStorage.removeItem('rmt_pending_question');
+  const banner = document.getElementById('payment-return-banner');
+  if (banner) banner.remove();
 }
 </script>
 </body>
