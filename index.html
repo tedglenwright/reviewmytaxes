@@ -687,6 +687,10 @@ class TaxDocumentParser {
     if (upper.includes('1099-MISC') || upper.includes('MISCELLANEOUS') || fname.includes('1099MISC')) {
       return this.parse1099MISC(text);
     }
+    // 1099-R
+    if (upper.includes('1099-R') || upper.includes('DISTRIBUTIONS FROM PENSIONS') || upper.includes('RETIREMENT') || fname.includes('1099R') || fname.includes('1099-R')) {
+      return this.parse1099R(text);
+    }
     // 1098 Mortgage
     if (upper.includes('1098') || upper.includes('MORTGAGE INTEREST') || fname.includes('1098')) {
       return this.parse1098(text);
@@ -1061,6 +1065,25 @@ class TaxDocumentParser {
     return { type: '1099misc', payer, rents, otherIncome: other };
   }
 
+  parse1099R(text) {
+    this.onLog('Detected: Form 1099-R (Retirement Distribution)');
+    const grossDist = this.findMoney(text, [
+      /(?:box\s*1|gross\s*distribution)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const taxableAmount = this.findMoney(text, [
+      /(?:box\s*2a|taxable\s*amount)\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const fedWithheld = this.findMoney(text, [
+      /(?:box\s*4|federal.*(?:tax|withheld|w\/h))\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const stateWithheld = this.findMoney(text, [
+      /(?:box\s*12|state.*(?:tax|withheld|w\/h))\D*(\d{1,3}(?:,?\d{3})*(?:\.\d{2})?)/i,
+    ]);
+    const payer = this.findPayer(text);
+    this.onLog(`  Gross distribution: $${grossDist.toLocaleString()}, Taxable: $${(taxableAmount || grossDist).toLocaleString()}, Fed WH: $${fedWithheld.toLocaleString()}`);
+    return { type: '1099r', payer, grossDistribution: grossDist, taxableAmount: taxableAmount || grossDist, fedWithheld, stateWithheld };
+  }
+
   parse1098(text) {
     this.onLog('Detected: Form 1098 (Mortgage Interest)');
     const interest = this.findMoney(text, [
@@ -1111,6 +1134,10 @@ function aggregateParsedDocs(docs) {
       case '1099b':
         doc.transactions.forEach(t => { t._sourceURL = doc._sourceURL; t._sourceFileName = doc._sourceFileName; });
         data.capitalGains.push(...doc.transactions);
+        break;
+      case '1099r':
+        if (!data.retirementDist) data.retirementDist = [];
+        data.retirementDist.push({ payer: doc.payer, grossDistribution: doc.grossDistribution, taxableAmount: doc.taxableAmount, fedWithheld: doc.fedWithheld || 0, stateWithheld: doc.stateWithheld || 0, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
         break;
       case '1098':
         mortgageInterest += doc.mortgageInterest || 0;
@@ -1180,8 +1207,8 @@ function computeTaxReturn(data) {
 
   // Wages
   const totalWages = (data.w2s||[]).reduce((s,w) => s + (w.wages||0), 0);
-  const totalFedWithheld = (data.w2s||[]).reduce((s,w) => s + (w.fedWithheld||0), 0);
-  const totalStateWithheld = (data.w2s||[]).reduce((s,w) => s + (w.stateWithheld||0), 0);
+  let totalFedWithheld = (data.w2s||[]).reduce((s,w) => s + (w.fedWithheld||0), 0);
+  let totalStateWithheld = (data.w2s||[]).reduce((s,w) => s + (w.stateWithheld||0), 0);
 
   // Interest & Dividends
   const totalInterest = (data.interest||[]).reduce((s,i) => s + (i.amount||0), 0);
@@ -1238,9 +1265,20 @@ function computeTaxReturn(data) {
     assumptions.push({ id:'cost_basis', text:'Used cost basis as reported on 1099-B; did not adjust for wash sales', impact:'high' });
   }
 
+  // Retirement Distributions (1099-R)
+  let totalRetirement = 0, retirementFedWithheld = 0, retirementStateWithheld = 0;
+  if (data.retirementDist && data.retirementDist.length > 0) {
+    totalRetirement = data.retirementDist.reduce((s, d) => s + (d.taxableAmount || 0), 0);
+    retirementFedWithheld = data.retirementDist.reduce((s, d) => s + (d.fedWithheld || 0), 0);
+    retirementStateWithheld = data.retirementDist.reduce((s, d) => s + (d.stateWithheld || 0), 0);
+    totalFedWithheld += retirementFedWithheld;
+    totalStateWithheld += retirementStateWithheld;
+    assumptions.push({ id:'1099r_taxable', text:'Assumed entire 1099-R distribution is taxable (Box 2a)', impact:'high' });
+  }
+
   // Total Income
   const capGainIncome = Math.max(netSTCG + netLTCG, -TAX.capitalLossLimit);
-  const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome;
+  const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome + totalRetirement;
 
   // Additional adjustments from user input
   const hsaDed = Math.min(data.hsaContribution || 0, fs === 'mfj' ? 8550 : 4300);
@@ -1343,7 +1381,8 @@ function computeTaxReturn(data) {
     dividends: data.dividends || [],
     _necSources: data._necSources || [],
     _mortgageSources: data._mortgageSources || [],
-    totalWages, totalInterest, totalOrdDiv, totalQualDiv,
+    totalWages, totalInterest, totalOrdDiv, totalQualDiv, totalRetirement,
+    retirementDist: data.retirementDist || [],
     schedCNet, netSTCG, netLTCG, capitalLossCarryover,
     totalIncome, adjustments, agi, deduction, usingItemized,
     qbiDeduction, taxableIncome, ordinaryTax, ltcgTax, incomeTax,
@@ -1573,6 +1612,14 @@ function showMortgageSource() {
   if (!r || !r._mortgageSources || r._mortgageSources.length === 0) return;
   const src = r._mortgageSources[0];
   openSourceModal('1098', src._sourceFileName, 'Mortgage Interest Statement', src._sourceURL);
+}
+
+function showRetirementSource(idx) {
+  const r = STATE.result;
+  if (!r || !r.retirementDist || !r.retirementDist[idx]) return;
+  const item = r.retirementDist[idx];
+  if (!item._sourceURL) return;
+  openSourceModal('1099-R', item._sourceFileName, item.payer || 'Retirement Distribution', item._sourceURL);
 }
 
 function showCapGainSource(idx) {
@@ -1860,7 +1907,7 @@ function renderUpload() {
           </div>
           <div style="margin-bottom:12px">
             <div style="font-weight:600;color:var(--text)">What documents are supported?</div>
-            W-2, 1099-INT, 1099-DIV, 1099-NEC, 1099-B, 1099-MISC, and 1098. Both PDFs (with text or scanned) and images (JPG, PNG) are supported.
+            W-2, 1099-INT, 1099-DIV, 1099-NEC, 1099-R, 1099-B, 1099-MISC, and 1098. Both PDFs (with text or scanned) and images (JPG, PNG) are supported.
           </div>
           <div style="margin-bottom:12px">
             <div style="font-weight:600;color:var(--text)">How accurate is it?</div>
@@ -1921,7 +1968,7 @@ function renderParsing() {
       ${docsFound > 0 ? `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
         ${STATE.parsedDocs.map(d => {
-          const labels = { w2:'W-2', '1099int':'1099-INT', '1099div':'1099-DIV', '1099nec':'1099-NEC', '1099b':'1099-B', '1099misc':'1099-MISC', '1098':'1098' };
+          const labels = { w2:'W-2', '1099int':'1099-INT', '1099div':'1099-DIV', '1099nec':'1099-NEC', '1099b':'1099-B', '1099misc':'1099-MISC', '1099r':'1099-R', '1098':'1098' };
           return '<span style="padding:3px 8px;background:rgba(34,197,94,0.15);color:var(--green);border-radius:4px;font-size:11px;font-weight:600">' + (labels[d.type] || d.type) + '</span>';
         }).join('')}
       </div>
@@ -2065,6 +2112,14 @@ function renderReturn(r) {
           return divHtml;
         })() : ''}
         ${r.totalQualDiv > 0 ? lineItem('3b. Qualified dividends', r.totalQualDiv, {sub:true}) : ''}
+        ${r.totalRetirement > 0 ? (() => {
+          let retHtml = lineItem('4a. IRA/pension distributions', r.retirementDist.reduce((s,d) => s + (d.grossDistribution||0), 0));
+          retHtml += lineItem('4b. Taxable amount', r.totalRetirement, {sub:true});
+          r.retirementDist.forEach((d, i) => {
+            retHtml += lineItem('   ' + esc(d.payer || 'Retirement Plan ' + (i+1)), d.taxableAmount, {sub:true, onClick: d._sourceURL ? 'showRetirementSource('+i+')' : ''});
+          });
+          return retHtml;
+        })() : ''}
         ${r.schedCNet !== 0 ? lineItem('8. Business income (Schedule C)', r.schedCNet, {onClick: r._necSources.length > 0 ? 'showNECSource()' : ''}) : ''}
         ${(r.netSTCG + r.netLTCG) !== 0 ? lineItem('7. Capital gain/loss (Schedule D)', r.netSTCG + r.netLTCG, {showSign:true, onClick: r.schedules.form8949 && r.schedules.form8949.some(t=>t._sourceURL) ? 'showCapGainSource(0)' : ''}) : ''}
         ${lineItem('9. Total income', r.totalIncome, {bold:true})}
@@ -2671,6 +2726,24 @@ function renderDocuments(r) {
     });
   }
 
+  // 1099-R Retirement
+  if (r.retirementDist && r.retirementDist.length > 0) {
+    html += `<div style="color:var(--accent-light);font-size:13px;font-weight:700;margin:16px 0 8px">1099-R Retirement Distributions</div>`;
+    r.retirementDist.forEach((d, i) => {
+      html += `
+        <div class="assumption-card" style="cursor:${d._sourceURL ? 'pointer' : 'default'}" ${d._sourceURL ? `onclick="showRetirementSource(${i})"` : ''}>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600">${esc(d.payer) || 'Retirement Plan'}</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">
+              Gross: $${fmt(d.grossDistribution)} · Taxable: $${fmt(d.taxableAmount)} · Fed WH: $${fmt(d.fedWithheld)}
+            </div>
+          </div>
+          ${d._sourceURL ? '<div style="color:var(--accent-light);font-size:12px;font-weight:600">View &#8599;</div>' : '<div style="color:var(--text-dim);font-size:11px">Demo data</div>'}
+        </div>
+      `;
+    });
+  }
+
   if (!r.w2s.length && !r.interest.length && !r.dividends.length) {
     html += `<div style="text-align:center;color:var(--text-dim);padding:32px;font-size:14px">No source documents — using demo data</div>`;
   }
@@ -3206,6 +3279,7 @@ function downloadSummary() {
   r.w2s.forEach((w, i) => lines.push(`  W-2 (${w.employer || 'Employer '+(i+1)}): Wages $${fmt(w.wages)}, Fed WH $${fmt(w.fedWithheld)}`));
   if (r.totalInterest > 0) lines.push(`  Interest income:       $${fmt(r.totalInterest)}`);
   if (r.totalOrdDiv > 0) lines.push(`  Ordinary dividends:    $${fmt(r.totalOrdDiv)}`);
+  if (r.totalRetirement > 0) lines.push(`  Retirement (1099-R):   $${fmt(r.totalRetirement)}`);
   if (r.schedCNet !== 0) lines.push(`  Business income (C):   $${fmt(r.schedCNet)}`);
   if (r.netSTCG + r.netLTCG !== 0) lines.push(`  Capital gains/losses:  $${fmt(r.netSTCG + r.netLTCG)}`);
   lines.push(`  Total Income:          $${fmt(r.totalIncome)}`);
