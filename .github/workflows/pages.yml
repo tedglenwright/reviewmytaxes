@@ -26,9 +26,11 @@ jobs:
       - name: Inject build number
         run: |
           BUILD_NUM=$(git rev-list --count HEAD)
+          echo "Build number: ${BUILD_NUM}"
           for f in index.html schedules.html; do
             [ -f "$f" ] && sed -i "s|<head>|<head><meta name=\"build\" content=\"${BUILD_NUM}\">|" "$f"
           done
+          sed -i "s|'dev'|'${BUILD_NUM}'|" js/shared-state.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
