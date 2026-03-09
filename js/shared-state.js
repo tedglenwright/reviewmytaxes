@@ -195,7 +195,7 @@ window.addEventListener('storage', (e) => {
 // THEME TOGGLE (dark/light mode)
 // ═══════════════════════════════════════════════════════════════
 const THEME_KEY = 'rmt_theme';
-function getTheme() { return localStorage.getItem(THEME_KEY) || 'dark'; }
+function getTheme() { return localStorage.getItem(THEME_KEY) || 'light'; }
 function setTheme(theme) {
   localStorage.setItem(THEME_KEY, theme);
   applyTheme(theme);
@@ -204,19 +204,25 @@ function setTheme(theme) {
 function toggleTheme() { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); }
 function applyTheme(theme) {
   const root = document.documentElement;
-  if (theme === 'light') {
-    root.style.setProperty('--bg', '#f0f4f8');
-    root.style.setProperty('--surface', '#ffffff');
-    root.style.setProperty('--surface-light', '#e2e8f0');
-    root.style.setProperty('--border', '#cbd5e1');
-    root.style.setProperty('--text', '#1e293b');
-    root.style.setProperty('--text-muted', '#475569');
-    root.style.setProperty('--text-dim', '#64748b');
-    root.style.setProperty('--glass-bg', 'rgba(255,255,255,0.7)');
-    root.style.setProperty('--glass-border', 'rgba(203,213,225,0.5)');
-    root.style.setProperty('--draft-bg', 'rgba(239,68,68,0.06)');
-    document.body.classList.add('light-theme');
-    document.body.classList.remove('dark-theme');
+  if (theme === 'dark') {
+    root.style.setProperty('--bg', '#0f172a');
+    root.style.setProperty('--surface', '#1e293b');
+    root.style.setProperty('--surface-light', '#334155');
+    root.style.setProperty('--border', '#475569');
+    root.style.setProperty('--text', '#f8fafc');
+    root.style.setProperty('--text-muted', '#94a3b8');
+    root.style.setProperty('--text-dim', '#7d8da0');
+    root.style.setProperty('--glass-bg', 'rgba(30, 41, 59, 0.6)');
+    root.style.setProperty('--glass-border', 'rgba(71, 85, 105, 0.4)');
+    root.style.setProperty('--draft-bg', 'rgba(239,68,68,0.10)');
+    root.style.setProperty('--accent', '#3b82f6');
+    root.style.setProperty('--accent-light', '#60a5fa');
+    root.style.setProperty('--gradient-start', '#3b82f6');
+    root.style.setProperty('--gradient-end', '#22c55e');
+    root.style.setProperty('--green', '#22c55e');
+    root.style.setProperty('--green-dark', '#15803d');
+    document.body.classList.add('dark-theme');
+    document.body.classList.remove('light-theme');
   } else {
     root.style.removeProperty('--bg');
     root.style.removeProperty('--surface');
@@ -228,8 +234,14 @@ function applyTheme(theme) {
     root.style.removeProperty('--glass-bg');
     root.style.removeProperty('--glass-border');
     root.style.removeProperty('--draft-bg');
-    document.body.classList.add('dark-theme');
-    document.body.classList.remove('light-theme');
+    root.style.removeProperty('--accent');
+    root.style.removeProperty('--accent-light');
+    root.style.removeProperty('--gradient-start');
+    root.style.removeProperty('--gradient-end');
+    root.style.removeProperty('--green');
+    root.style.removeProperty('--green-dark');
+    document.body.classList.add('light-theme');
+    document.body.classList.remove('dark-theme');
   }
 }
 // Apply saved theme on load

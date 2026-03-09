@@ -470,7 +470,7 @@ function renderUpload() {
 
       ${STATE.files.length === 0 && STATE.taxData ? `
       <div style="margin-top:20px;animation:fade-up 0.6s ease-out 0.25s both">
-        <button onclick="STATE.screen='review';STATE.result=safeCompute(STATE.taxData);render();" style="width:100%;padding:14px 20px;background:linear-gradient(135deg,rgba(34,197,94,0.12),rgba(59,130,246,0.08));border:1px solid var(--green-dark);border-radius:12px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:transform 0.2s,box-shadow 0.2s;font-family:inherit;color:inherit;text-align:left">
+        <button onclick="STATE.screen='review';STATE.result=safeCompute(STATE.taxData);render();" style="width:100%;padding:14px 20px;background:linear-gradient(135deg,rgba(34,197,94,0.12),rgba(79,70,229,0.08));border:1px solid var(--green-dark);border-radius:12px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:transform 0.2s,box-shadow 0.2s;font-family:inherit;color:inherit;text-align:left">
           <div style="font-size:28px;flex-shrink:0">&#x1f4cb;</div>
           <div>
             <div style="font-size:15px;font-weight:700;color:var(--green)">Continue Previous Return</div>
@@ -705,7 +705,7 @@ function renderReturn(r) {
         ` : ''}
 
         ${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
-        <div style="background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(34,197,94,0.08));border:1px solid var(--accent);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="setTab('assumptions')">
+        <div style="background:linear-gradient(135deg,rgba(79,70,229,0.10),rgba(34,197,94,0.08));border:1px solid var(--accent);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="setTab('assumptions')">
           <div>
             <div style="color:var(--accent-light);font-size:15px;font-weight:700">Your return could be more accurate</div>
             <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length} questions can improve your estimate · $5 per question</div>
@@ -718,7 +718,7 @@ function renderReturn(r) {
               return teasers.length > 0 ? '<div style="color:var(--green);font-size:11px;margin-top:4px;font-weight:600">' + teasers.join(' · ') + '</div>' : '';
             })()}
           </div>
-          <button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.3)">Refine Now</button>
+          <button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 4px 12px rgba(79,70,229,0.25)">Refine Now</button>
         </div>
         ` : ''}
 
@@ -841,7 +841,7 @@ function renderReturn(r) {
         ${r.schedules['1'].movingExpenses > 0 ? lineItem('Moving expenses', r.schedules['1'].movingExpenses, {indent:true, sub:true}) : ''}
         ${r.adjustments === 0 ? lineItem('No adjustments', 0, {sub:true}) : ''}
         ${r.adjustments === 0 && !STATE.answeredQs.has('no_hsa') ? `
-        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(79,70,229,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
           <span style="font-size:14px">&#x1F4A1;</span> HSA and IRA contributions could reduce your taxes <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
         </div>
         ` : ''}
@@ -853,7 +853,7 @@ function renderReturn(r) {
         ${sectionHeader('Deductions', 'Lines 12–15')}
         ${lineItem('12. ' + (r.usingItemized ? 'Itemized deductions (Schedule A)' : 'Standard deduction'), r.deduction)}
         ${!r.usingItemized && !STATE.answeredQs.has('std_deduction') ? `
-        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(79,70,229,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
           <span style="font-size:14px">&#x1F4A1;</span> Could itemizing save you more? <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
         </div>
         ` : ''}
@@ -876,7 +876,7 @@ function renderReturn(r) {
           return credHtml;
         })() : ''}
         ${r.schedules['3'].totalCredits === 0 && !STATE.answeredQs.has('no_credits') && !STATE.answeredQs.has('dependents') ? `
-        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(79,70,229,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
           <span style="font-size:14px">&#x1F4A1;</span> Education credits, child care credit could help <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
         </div>
         ` : ''}
@@ -977,7 +977,7 @@ function renderReturn(r) {
   return html;
 })()}
         ${r.refundOrOwed < 0 && r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
-        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(79,70,229,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
           <span style="font-size:14px">&#x1F4A1;</span> Refinements could reduce what you owe <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
         </div>
         ` : ''}
@@ -1413,7 +1413,7 @@ function renderAssumptions(r) {
       <p style="color:var(--text-muted);font-size:13px;margin-top:4px">
         Your draft return made these assumptions. Refine them to get a more accurate estimate.
       </p>
-      <div style="margin-top:10px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div style="margin-top:10px;padding:10px 14px;background:rgba(79,70,229,0.08);border:1px solid var(--accent);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div>
           <div style="color:var(--accent-light);font-size:14px;font-weight:700">$5 per question</div>
           <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${statusText}</div>
@@ -1495,7 +1495,7 @@ function renderPricing() {
     </p>
 
     <!-- Value Proposition -->
-    <div style="background:linear-gradient(135deg,rgba(59,130,246,0.08),rgba(34,197,94,0.08));border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
+    <div style="background:linear-gradient(135deg,rgba(79,70,229,0.08),rgba(34,197,94,0.08));border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center">
         <div>
           <div style="font-size:28px;font-weight:800;color:var(--green)">Free</div>
@@ -1643,7 +1643,7 @@ function renderDocuments(r) {
       ${hasUploaded ? 'Click any document to view the original.' : 'Using demo data.'} All data is stored in your browser memory only.
     </p>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
-      ${Object.entries(docCounts).map(([type, count]) => `<span style="padding:4px 10px;background:rgba(59,130,246,0.1);border:1px solid var(--accent);border-radius:16px;font-size:11px;color:var(--accent-light);font-weight:600">${type} × ${count}</span>`).join('')}
+      ${Object.entries(docCounts).map(([type, count]) => `<span style="padding:4px 10px;background:rgba(79,70,229,0.08);border:1px solid var(--accent);border-radius:16px;font-size:11px;color:var(--accent-light);font-weight:600">${type} × ${count}</span>`).join('')}
       <span style="padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:16px;font-size:11px;color:var(--text-muted);font-weight:600">${totalDocs} total</span>
     </div>
   `;
@@ -2470,7 +2470,7 @@ function getAssumptionForm(id) {
           <input type="number" id="modal-other-deps" min="0" max="10" value="${STATE.taxData.numOtherDeps || 0}" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit" oninput="updateDepFields()">
         </div>
         <div id="dep-details"></div>
-        <div style="margin-top:12px;padding:10px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text-muted)">
+        <div style="margin-top:12px;padding:10px;background:rgba(79,70,229,0.08);border:1px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text-muted)">
           <strong>Child Tax Credit:</strong> $2,000 per qualifying child under 17<br>
           <strong>Other Dependent Credit:</strong> $500 per other dependent<br>
           <strong>EITC:</strong> Earned Income Credit amount depends on number of qualifying children and income
@@ -2535,7 +2535,7 @@ function getAssumptionForm(id) {
             <input type="number" id="modal-charity-cash" min="0" step="100" value="${(STATE.taxData.itemized||{}).charitableCash || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;font-family:inherit">
             <label style="display:block;color:var(--text-muted);font-size:12px;margin-bottom:4px">Charitable contributions (non-cash):</label>
             <input type="number" id="modal-charity-noncash" min="0" step="100" value="${(STATE.taxData.itemized||{}).charitableNonCash || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
-            <div id="itemized-comparison" style="margin-top:12px;padding:10px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text-muted)">
+            <div id="itemized-comparison" style="margin-top:12px;padding:10px;background:rgba(79,70,229,0.08);border:1px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text-muted)">
               Enter your deductions above. If itemized total exceeds the standard deduction ($${TAX.standardDeduction[STATE.taxData.filingStatus || 'single'].toLocaleString()}), itemizing saves you money.
             </div>
           </div>
@@ -2815,7 +2815,7 @@ function getAssumptionForm(id) {
             <input type="number" id="modal-1031-boot-paid" min="0" step="100" value="${ex.bootPaid||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit"></div>
           </div>
         </div>
-        <div style="margin-top:12px;padding:12px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px">
+        <div style="margin-top:12px;padding:12px;background:rgba(79,70,229,0.08);border:1px solid var(--accent);border-radius:8px">
           <div style="color:var(--accent-light);font-size:12px;font-weight:600;margin-bottom:4px">Upload supporting documents ($5 each)</div>
           <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px">Upload closing statements, HUD-1, exchange agreement, or Form 8824</div>
           <label style="display:inline-block;padding:6px 16px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">
