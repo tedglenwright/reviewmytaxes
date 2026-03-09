@@ -1298,7 +1298,7 @@ function computeTaxReturn(data) {
     schedCNet, netSTCG, netLTCG, capitalLossCarryover,
     totalIncome, adjustments, agi, deduction, usingItemized,
     qbiDeduction, taxableIncome, ordinaryTax, ltcgTax, incomeTax,
-    seTax, niit, totalTax, totalFedWithheld,
+    seTax, niit, totalTax, totalFedWithheld, totalStateWithheld,
     estimatedPayments: data.estimatedPayments||0,
     totalPayments, refundOrOwed, assumptions, schedules,
     effectiveRate: totalIncome > 0 ? (totalTax / totalIncome * 100) : 0,
@@ -1844,11 +1844,34 @@ function renderReturn(r) {
         </div>
 
         <div class="summary-grid">
-          <div class="summary-card${r.w2s.some(w=>w._sourceURL) ? ' clickable' : ''}" ${r.w2s.some(w=>w._sourceURL) ? 'onclick="showAllSourceDocs()" style="cursor:pointer"' : ''}><div class="lbl">Total Income</div><div class="val" style="color:var(--text)">$${fmt(r.totalIncome)}</div></div>
-          <div class="summary-card"><div class="lbl">Total Tax</div><div class="val" style="color:var(--orange)">$${fmt(r.totalTax)}</div></div>
-          <div class="summary-card"><div class="lbl">${r.refundOrOwed >= 0 ? 'Refund' : 'Amount Owed'}</div><div class="val" style="color:${r.refundOrOwed>=0?'var(--green)':'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div></div>
-          <div class="summary-card"><div class="lbl">Effective Rate</div><div class="val" style="color:var(--accent-light)">${r.effectiveRate.toFixed(1)}%</div></div>
+          <div class="summary-card${r.w2s.some(w=>w._sourceURL) ? ' clickable' : ''}" ${r.w2s.some(w=>w._sourceURL) ? 'onclick="showAllSourceDocs()" style="cursor:pointer"' : ''}>
+            <div class="lbl">Total Income</div>
+            <div class="val" style="color:var(--text)">$${fmt(r.totalIncome)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Total Tax</div>
+            <div class="val" style="color:var(--orange)">$${fmt(r.totalTax)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">${r.refundOrOwed >= 0 ? 'Estimated Refund' : 'Amount Owed'}</div>
+            <div class="val" style="color:${r.refundOrOwed>=0?'var(--green)':'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Effective Rate</div>
+            <div class="val" style="color:var(--accent-light)">${r.effectiveRate.toFixed(1)}%</div>
+            <div style="color:var(--text-dim);font-size:10px;margin-top:2px">Marginal: ${r.marginalRate}%</div>
+          </div>
         </div>
+
+        ${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
+        <div style="background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="color:var(--accent-light);font-size:13px;font-weight:600">Want a more accurate estimate?</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length} questions can refine your return</div>
+          </div>
+          <button onclick="setTab('assumptions')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Refine Now</button>
+        </div>
+        ` : ''}
 
         ${sectionHeader('Form 1040 — Income', 'Lines 1–9')}
         ${r.totalWages > 0 ? (() => {
@@ -1935,6 +1958,12 @@ function renderReturn(r) {
           <div class="amount" style="color:${r.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div>
           <div class="rates">Marginal rate: ${r.marginalRate}% · Effective rate: ${r.effectiveRate.toFixed(1)}%</div>
         </div>
+        ${r.totalStateWithheld > 0 ? `
+        <div style="margin-top:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center">
+          <span>State income tax withheld (not calculated — federal only)</span>
+          <span style="color:var(--text);font-weight:600">$${fmt(r.totalStateWithheld)}</span>
+        </div>
+        ` : ''}
   `;
 
   // Tax Bracket Visualization
@@ -2054,6 +2083,43 @@ function renderReturn(r) {
     });
     html += `</tbody></table></div>`;
   }
+
+  // Next Steps
+  const unansweredCount = r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length;
+  html += `
+    ${sectionHeader('What You Can Do Next', '')}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px">
+      ${unansweredCount > 0 ? `
+      <div class="assumption-card" style="cursor:pointer;text-align:center" onclick="setTab('assumptions')">
+        <div style="flex:1">
+          <div style="font-size:24px;margin-bottom:6px">&#x270F;&#xFE0F;</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent-light)">Refine Your Return</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${unansweredCount} question${unansweredCount>1?'s':''} can improve accuracy</div>
+        </div>
+      </div>` : ''}
+      <div class="assumption-card" style="cursor:pointer;text-align:center" onclick="setTab('documents')">
+        <div style="flex:1">
+          <div style="font-size:24px;margin-bottom:6px">&#x1F4C4;</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent-light)">View Documents</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Review uploaded source documents</div>
+        </div>
+      </div>
+      <div class="assumption-card" style="cursor:pointer;text-align:center" onclick="window.print()">
+        <div style="flex:1">
+          <div style="font-size:24px;margin-bottom:6px">&#x1F5A8;&#xFE0F;</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent-light)">Print This Draft</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Save as PDF or print for your records</div>
+        </div>
+      </div>
+      <div class="assumption-card" style="cursor:pointer;text-align:center" onclick="goBack()">
+        <div style="flex:1">
+          <div style="font-size:24px;margin-bottom:6px">&#x1F504;</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent-light)">Start Over</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Upload different documents</div>
+        </div>
+      </div>
+    </div>
+  `;
 
   // Footer
   html += `
