@@ -87,6 +87,11 @@ if (!loadTaxData() || !STATE.taxData) {
     }
 
     showToast('Schedule saved — return recalculated', 'success');
+    // Reset save button and live preview
+    const saveBtn = document.querySelector('.btn-save');
+    if (saveBtn) { delete saveBtn.dataset.original; saveBtn.textContent = 'Save & Recalculate'; saveBtn.style.background = 'var(--green)'; }
+    const previewBox = document.getElementById('live-preview');
+    if (previewBox) previewBox.style.display = 'none';
     renderSchedules();
   }
 
@@ -130,9 +135,12 @@ if (!loadTaxData() || !STATE.taxData) {
         ${activeSchedule === 'A' ? renderScheduleA() : ''}
         ${activeSchedule === '8824' ? renderForm8824() : ''}
 
-        <div class="save-bar">
-          <button class="btn-save" onclick="collectFormData(); saveAndRecalculate()">Save & Recalculate</button>
-          <a href="index.html" class="btn-back-link">Back to Return</a>
+        <div class="save-bar" style="flex-direction:column;gap:8px">
+          <div id="live-preview" style="display:none;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap"></div>
+          <div style="display:flex;gap:12px;justify-content:center">
+            <button class="btn-save" onclick="collectFormData(); saveAndRecalculate()">Save & Recalculate</button>
+            <a href="index.html" class="btn-back-link">Back to Return</a>
+          </div>
         </div>
       </div>
     `;
@@ -471,6 +479,38 @@ if (!loadTaxData() || !STATE.taxData) {
       }
     }
   }
+
+  // Live preview: recalculate as user types (debounced)
+  let _previewTimer = null;
+  document.addEventListener('input', (e) => {
+    if (e.target.closest('.form-field') || e.target.classList.contains('cg-desc') || e.target.classList.contains('cg-proceeds') || e.target.classList.contains('cg-basis')) {
+      // Show "unsaved" indicator
+      const saveBtn = document.querySelector('.btn-save');
+      if (saveBtn && !saveBtn.dataset.original) {
+        saveBtn.dataset.original = saveBtn.textContent;
+        saveBtn.textContent = 'Save & Recalculate *';
+        saveBtn.style.background = 'var(--orange)';
+      }
+      // Debounced live preview
+      clearTimeout(_previewTimer);
+      _previewTimer = setTimeout(() => {
+        collectFormData();
+        const preview = computeTaxReturn(STATE.taxData);
+        const previewBox = document.getElementById('live-preview');
+        if (previewBox) {
+          const diff = preview.refundOrOwed - result.refundOrOwed;
+          previewBox.innerHTML = `
+            <span style="color:var(--text-muted);font-size:12px">Live preview:</span>
+            <span style="color:${preview.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'};font-size:16px;font-weight:800">
+              ${preview.refundOrOwed >= 0 ? 'Refund' : 'Owed'}: $${fmt(Math.abs(preview.refundOrOwed))}
+            </span>
+            ${diff !== 0 ? `<span style="color:${diff > 0 ? 'var(--green)' : 'var(--red)'};font-size:12px;font-weight:600">(${diff > 0 ? '+' : ''}$${fmt(diff)})</span>` : ''}
+          `;
+          previewBox.style.display = 'flex';
+        }
+      }, 400);
+    }
+  });
 
   // Initial render
   renderSchedules();
