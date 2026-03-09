@@ -534,6 +534,16 @@
     .demo-grid { grid-template-columns: 1fr; }
     .how-steps { grid-template-columns: 1fr; }
   }
+  .fab-refine {
+    position: fixed; bottom: 24px; right: 24px; z-index: 20;
+    background: var(--accent); color: #fff; border: none; border-radius: 50px;
+    padding: 14px 24px; font-size: 14px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 20px rgba(59,130,246,0.4);
+    display: flex; align-items: center; gap: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+  }
+  .fab-refine:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(59,130,246,0.5); }
 </style>
 </head>
 <body>
@@ -2486,12 +2496,11 @@ function renderParsing() {
 }
 
 function renderReview() {
+  document.querySelectorAll('.fab-refine').forEach(el => el.remove());
   const r = STATE.result;
   if (!r) return;
 
   const answeredCount = STATE.answeredQs.size;
-  const totalCost = answeredCount > 0 ? 5 : 0; // $5 flat for up to 3 questions
-  const freeQsLeft = Math.max(0, 3 - answeredCount);
 
   app.innerHTML = `
     <div class="top-bar">
@@ -2501,7 +2510,7 @@ function renderReview() {
         <span style="color:var(--text-muted);font-size:13px">${FS_LABELS[r.filingStatus]} · Tax Year ${TAX.year}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        ${answeredCount > 0 ? `<div class="cost-badge">${answeredCount} refined · $5${answeredCount <= 3 ? ' ('+freeQsLeft+' left)' : ' + free'}</div>` : ''}
+        ${answeredCount > 0 ? `<div class="cost-badge">${answeredCount} refined · $${Math.ceil(answeredCount/3)*5}${PAID_QUESTIONS > 0 ? ' ('+PAID_QUESTIONS+' left)' : ''}</div>` : ''}
         <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
@@ -2523,6 +2532,17 @@ function renderReview() {
       ${STATE.tab === 'compare' ? renderCompare(r) : ''}
     </div>
   `;
+
+  if (STATE.tab === 'return') {
+    const unanswered = r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length;
+    if (unanswered > 0) {
+      const fab = document.createElement('button');
+      fab.className = 'fab-refine';
+      fab.innerHTML = '&#x2728; Refine (' + unanswered + ')';
+      fab.onclick = () => setTab('assumptions');
+      document.body.appendChild(fab);
+    }
+  }
 }
 
 function renderReturn(r) {
@@ -2585,12 +2605,20 @@ function renderReturn(r) {
         ` : ''}
 
         ${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
-        <div style="background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+        <div style="background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(34,197,94,0.08));border:1px solid var(--accent);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="setTab('assumptions')">
           <div>
-            <div style="color:var(--accent-light);font-size:13px;font-weight:600">Want a more accurate estimate? · $5 for 3 questions</div>
-            <div style="color:var(--text-muted);font-size:12px;margin-top:2px">${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length} questions can refine your return</div>
+            <div style="color:var(--accent-light);font-size:15px;font-weight:700">Your return could be more accurate</div>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length} questions can improve your estimate · $5 for 3 questions</div>
+            ${(() => {
+              const hasDeductions = !STATE.taxData.hsaContribution && !STATE.taxData.iraContribution;
+              const hasDependents = !STATE.taxData.dependents;
+              const teasers = [];
+              if (hasDeductions) teasers.push('HSA/IRA could save you $' + Math.round(r.marginalRate/100 * 7000).toLocaleString());
+              if (hasDependents) teasers.push('Each child = $2,000 credit');
+              return teasers.length > 0 ? '<div style="color:var(--green);font-size:11px;margin-top:4px;font-weight:600">' + teasers.join(' · ') + '</div>' : '';
+            })()}
           </div>
-          <button onclick="setTab('assumptions')" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Refine Now · $5</button>
+          <button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 4px 12px rgba(59,130,246,0.3)">Refine Now</button>
         </div>
         ` : ''}
 
@@ -2650,6 +2678,11 @@ function renderReturn(r) {
         ${r.schedules['1'].alimonyPaid > 0 ? lineItem('Alimony paid', r.schedules['1'].alimonyPaid, {indent:true, sub:true}) : ''}
         ${r.schedules['1'].movingExpenses > 0 ? lineItem('Moving expenses', r.schedules['1'].movingExpenses, {indent:true, sub:true}) : ''}
         ${r.adjustments === 0 ? lineItem('No adjustments', 0, {sub:true}) : ''}
+        ${r.adjustments === 0 && !STATE.answeredQs.has('no_hsa') ? `
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px">&#x1F4A1;</span> HSA and IRA contributions could reduce your taxes <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
+        </div>
+        ` : ''}
         ${lineItem('10. Adjustments', r.adjustments, {bold:true})}
 
         ${sectionHeader('Adjusted Gross Income', 'Line 11')}
@@ -2657,6 +2690,11 @@ function renderReturn(r) {
 
         ${sectionHeader('Deductions', 'Lines 12–15')}
         ${lineItem('12. ' + (r.usingItemized ? 'Itemized deductions (Schedule A)' : 'Standard deduction'), r.deduction)}
+        ${!r.usingItemized && !STATE.answeredQs.has('std_deduction') ? `
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px">&#x1F4A1;</span> Could itemizing save you more? <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
+        </div>
+        ` : ''}
         ${r.qbiDeduction > 0 ? lineItem('13. Qualified business income deduction', r.qbiDeduction) : ''}
         ${lineItem('15. Taxable income', r.taxableIncome, {bold:true})}
 
@@ -2675,6 +2713,11 @@ function renderReturn(r) {
           credHtml += lineItem('21. Credits', r.schedules['3'].totalNonrefundableCredits, {sub:true});
           return credHtml;
         })() : ''}
+        ${r.schedules['3'].totalCredits === 0 && !STATE.answeredQs.has('no_credits') && !STATE.answeredQs.has('dependents') ? `
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px">&#x1F4A1;</span> Education credits, child care credit could help <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
+        </div>
+        ` : ''}
         ${r.seTax > 0 ? lineItem('23. Self-employment tax (Schedule SE)', r.seTax) : ''}
         ${r.niit > 0 ? lineItem('Net investment income tax (3.8%)', r.niit) : ''}
         ${r.amt > 0 ? lineItem('Alternative Minimum Tax (Form 6251)', r.amt) : ''}
@@ -2707,6 +2750,11 @@ function renderReturn(r) {
           <div class="amount" style="color:${r.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div>
           <div class="rates">Marginal rate: ${r.marginalRate}% · Effective rate: ${r.effectiveRate.toFixed(1)}%</div>
         </div>
+        ${r.refundOrOwed < 0 && r.assumptions.filter(a => !STATE.answeredQs.has(a.id) && getAssumptionForm(a.id)).length > 0 ? `
+        <div onclick="setTab('assumptions')" style="cursor:pointer;padding:6px 12px;margin:4px 0;background:rgba(59,130,246,0.06);border-radius:6px;font-size:11px;color:var(--accent-light);display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px">&#x1F4A1;</span> Refinements could reduce what you owe <span style="font-weight:600;text-decoration:underline">Check now &#x2192;</span>
+        </div>
+        ` : ''}
         ${r.stateResult && r.stateResult.type !== 'none' && r.stateResult.tax > 0 ? `
         ${sectionHeader(r.stateResult.stateName + ' State Tax', r.stateResult.type === 'flat' ? 'Flat rate' : 'Progressive brackets')}
         ${lineItem('State AGI (from federal)', r.stateResult.stateAGI)}
@@ -2975,7 +3023,12 @@ function renderAssumptions(r) {
   const unanswered = r.assumptions.filter(a => !STATE.answeredQs.has(a.id));
   const answeredList = r.assumptions.filter(a => STATE.answeredQs.has(a.id));
   const answeredCount = STATE.answeredQs.size;
-  const freeQsLeft = Math.max(0, 3 - answeredCount);
+  const blocksUsed = Math.ceil(answeredCount / 3);
+  const statusText = PAID_QUESTIONS > 0
+    ? PAID_QUESTIONS + ' question' + (PAID_QUESTIONS !== 1 ? 's' : '') + ' remaining in your block'
+    : answeredCount === 0
+      ? 'First 3 refinements for $5 total'
+      : 'Buy another block of 3 questions for $5';
 
   let html = `
     <div style="margin-bottom:16px">
@@ -2986,7 +3039,7 @@ function renderAssumptions(r) {
       <div style="margin-top:10px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div>
           <div style="color:var(--accent-light);font-size:14px;font-weight:700">$5 for 3 questions</div>
-          <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${answeredCount >= 3 ? 'All additional questions are free' : PAID_QUESTIONS > 0 ? PAID_QUESTIONS + ' paid question' + (PAID_QUESTIONS !== 1 ? 's' : '') + ' ready to use' : answeredCount > 0 ? freeQsLeft + ' question' + (freeQsLeft !== 1 ? 's' : '') + ' remaining in your $5 bundle' : 'First 3 refinements for $5 total · Free after that'}</div>
+          <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${statusText}</div>
         </div>
         <div style="color:var(--accent-light);font-size:20px;font-weight:800">$5</div>
       </div>
@@ -3007,8 +3060,14 @@ function renderAssumptions(r) {
     html += `<div style="color:var(--text-dim);font-size:12px;margin-bottom:8px;font-weight:600">Needs your input (${unanswered.length})</div>`;
     unanswered.forEach((a, i) => {
       const canInteract = getAssumptionForm(a.id) !== null;
-      const isFree = answeredCount >= 3 || !canInteract;
-      const needsPayment = canInteract && !isFree && PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions;
+      const needsPayment = canInteract && PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions;
+      const hintMap = {
+        'filing_status': 'Changing filing status can save thousands',
+        'dependents': 'Child Tax Credit = $2,000 per qualifying child',
+        'no_hsa': 'HSA/IRA = up to $15,550 off your taxable income',
+        'select_state': 'See your state tax refund or amount owed'
+      };
+      const hint = hintMap[a.id] || '';
       html += `
         <div class="assumption-card">
           <div style="flex:1">
@@ -3017,9 +3076,10 @@ function renderAssumptions(r) {
               ${canInteract ? '<span style="color:var(--accent-light);font-size:10px;font-weight:600">INTERACTIVE</span>' : ''}
             </div>
             <div class="assumption-text">${a.text}</div>
+            ${hint ? '<div style="color:var(--green);font-size:11px;margin-top:4px;font-weight:600">' + hint + '</div>' : ''}
           </div>
           <button class="btn-answer" onclick="answerQuestion('${a.id}')" style="${canInteract ? 'padding:8px 16px;font-size:13px' : ''}${needsPayment ? ';background:var(--green)' : ''}">
-            ${!canInteract ? 'OK' : needsPayment ? 'Pay $5 → Refine' : isFree ? 'Refine (free)' : 'Refine'}
+            ${!canInteract ? 'OK' : needsPayment ? 'Pay $5 → Refine' : PAID_QUESTIONS > 0 ? 'Refine' : 'Refine'}
           </button>
         </div>
       `;
@@ -3069,8 +3129,8 @@ function renderPricing() {
           <div style="color:var(--text-muted);font-size:12px;margin-top:4px">For 3 questions to refine</div>
         </div>
         <div>
-          <div style="font-size:28px;font-weight:800;color:var(--green)">Free</div>
-          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Every question after 3</div>
+          <div style="font-size:28px;font-weight:800;color:var(--accent-light)">$5</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Every 3 questions after</div>
         </div>
       </div>
     </div>
@@ -3105,13 +3165,12 @@ function renderPricing() {
       </div>
       <div class="pricing-card green">
         <div style="color:var(--green);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 3</div>
-        <div class="price" style="color:var(--green)">Free</div>
-        <div class="plan">Unlimited After That</div>
+        <div class="price" style="color:var(--accent-light)">$5</div>
+        <div class="plan">Every 3 Questions</div>
         <div class="features" style="text-align:left;padding:0 8px">
-          &#x2713; All questions after 3 are free<br>
-          &#x2713; Unlimited recalculations<br>
-          &#x2713; Compare scenarios<br>
-          &#x2713; No subscription<br>
+          &#x2713; $5 per block of 3 questions<br>
+          &#x2713; No subscription required<br>
+          &#x2713; Pay only when you need more<br>
           &#x2713; No account needed<br>
           &#x2713; Nothing stored anywhere
         </div>
@@ -3134,7 +3193,7 @@ function renderPricing() {
           <tbody>
             <tr style="border-bottom:1px solid var(--surface-light)">
               <td style="padding:8px;color:var(--text-muted)">Price</td>
-              <td style="text-align:center;padding:8px;color:var(--green);font-weight:600">$0–$5</td>
+              <td style="text-align:center;padding:8px;color:var(--green);font-weight:600">$5 per 3 questions</td>
               <td style="text-align:center;padding:8px;color:var(--text-muted)">$0–$129+</td>
               <td style="text-align:center;padding:8px;color:var(--text-muted)">$200–$500+</td>
             </tr>
@@ -3324,6 +3383,20 @@ function renderDocuments(r) {
     html += `<div style="text-align:center;color:var(--text-dim);padding:32px;font-size:14px">No source documents — using demo data</div>`;
   }
 
+  const answeredCount = STATE.answeredQs.size;
+  const needsPayment = PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions;
+  html += `
+    <div style="margin-top:24px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;text-align:center">
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px">Have more documents to add?</div>
+      <div style="color:var(--text-muted);font-size:12px;margin-bottom:12px">Upload additional W-2s, 1099s, 1098s, or SSA-1099s to refine your return</div>
+      <label style="display:inline-block;padding:10px 24px;background:${needsPayment ? 'var(--green)' : 'var(--accent)'};color:#fff;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.2s">
+        ${needsPayment ? 'Pay $5 → Upload More' : 'Upload More Documents'}
+        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp" style="display:none" onchange="handleAdditionalUpload(event)">
+      </label>
+      <div style="color:var(--text-dim);font-size:11px;margin-top:8px">Each upload counts as 1 question${needsPayment ? ' · $5 for 3 questions' : ''}</div>
+    </div>
+  `;
+
   return html;
 }
 
@@ -3432,6 +3505,96 @@ function loadDemo(key) {
   render();
 }
 
+async function handleAdditionalUpload(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+
+  // Check payment gate
+  const uploadKey = 'upload_additional_' + Date.now();
+  if (!STATE.answeredQs.has(uploadKey)) {
+    if (PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.three_questions) {
+      window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
+      return;
+    }
+    if (PAID_QUESTIONS > 0) {
+      PAID_QUESTIONS--;
+      try {
+        const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
+        payment.usedQuestions = (payment.usedQuestions || 0) + 1;
+        localStorage.setItem('rmt_payment', JSON.stringify(payment));
+      } catch(e) {}
+    }
+    STATE.answeredQs.add(uploadKey);
+    try { sessionStorage.setItem('rmt_answered', JSON.stringify([...STATE.answeredQs])); } catch(e) {}
+  }
+
+  // Parse new documents
+  const parser = new TaxDocumentParser(
+    (msg) => console.log('[Additional upload]', msg),
+    () => {}
+  );
+
+  const newDocs = [];
+  for (const file of files) {
+    try {
+      const result = await parser.parseFile(file);
+      if (result) {
+        result._sourceURL = URL.createObjectURL(file);
+        result._sourceFileName = file.name;
+        newDocs.push(result);
+      }
+    } catch(e) {
+      console.error('Error parsing additional file:', e);
+    }
+  }
+
+  if (newDocs.length === 0) {
+    showToast('Could not parse any documents', 'error');
+    return;
+  }
+
+  // Merge new docs into existing tax data
+  const newAgg = aggregateParsedDocs(newDocs);
+
+  // Merge W-2s
+  if (newAgg.w2s) STATE.taxData.w2s = (STATE.taxData.w2s || []).concat(newAgg.w2s);
+  // Merge interest
+  if (newAgg.interest) STATE.taxData.interest = (STATE.taxData.interest || []).concat(newAgg.interest);
+  // Merge dividends
+  if (newAgg.dividends) STATE.taxData.dividends = (STATE.taxData.dividends || []).concat(newAgg.dividends);
+  // Merge capital gains
+  if (newAgg.capitalGains) STATE.taxData.capitalGains = (STATE.taxData.capitalGains || []).concat(newAgg.capitalGains);
+  // Merge retirement
+  if (newAgg.retirementDist) STATE.taxData.retirementDist = (STATE.taxData.retirementDist || []).concat(newAgg.retirementDist);
+  // Merge Schedule C
+  if (newAgg.scheduleC && !STATE.taxData.scheduleC) STATE.taxData.scheduleC = newAgg.scheduleC;
+  else if (newAgg.scheduleC && STATE.taxData.scheduleC) {
+    STATE.taxData.scheduleC.grossReceipts += newAgg.scheduleC.grossReceipts;
+  }
+  // Merge SSA
+  if (newAgg.ssaBenefits) STATE.taxData.ssaBenefits = (STATE.taxData.ssaBenefits || 0) + newAgg.ssaBenefits;
+  if (newAgg.ssaWithheld) STATE.taxData.ssaWithheld = (STATE.taxData.ssaWithheld || 0) + newAgg.ssaWithheld;
+  // Merge itemized if new 1098 found
+  if (newAgg.itemized) {
+    if (!STATE.taxData.itemized) STATE.taxData.itemized = newAgg.itemized;
+    else {
+      STATE.taxData.itemized.mortgageInterest = (STATE.taxData.itemized.mortgageInterest||0) + (newAgg.itemized.mortgageInterest||0);
+      STATE.taxData.itemized.propertyTaxes = (STATE.taxData.itemized.propertyTaxes||0) + (newAgg.itemized.propertyTaxes||0);
+    }
+  }
+  // Auto-detect state from new W-2s if not already set
+  if (!STATE.taxData.stateCode) {
+    const w2WithState = (newAgg.w2s||[]).find(w => w.stateCode);
+    if (w2WithState) STATE.taxData.stateCode = w2WithState.stateCode;
+  }
+
+  // Recalculate
+  STATE.result = computeTaxReturn(STATE.taxData);
+  showToast(`Added ${newDocs.length} document${newDocs.length > 1 ? 's' : ''} — return recalculated`, 'success');
+  STATE.tab = 'return';
+  render();
+}
+
 function goBack() {
   // Revoke object URLs to free memory
   if (STATE.result) {
@@ -3504,7 +3667,7 @@ function runScenario(scenarioId) {
   // Check payment gate — comparisons count as questions (but don't charge for re-runs)
   var compareKey = 'compare_' + scenarioId;
   if (!STATE.answeredQs.has(compareKey)) {
-    if (STATE.answeredQs.size < 3 && PAID_QUESTIONS <= 0) {
+    if (PAID_QUESTIONS <= 0) {
       if (STRIPE_PAYMENT_LINKS.three_questions) {
         window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
         return;
@@ -3604,8 +3767,8 @@ function runScenario(scenarioId) {
 function answerQuestion(id) {
   const formHtml = getAssumptionForm(id);
 
-  // Check if this is a paid question (first 3 interactive questions)
-  if (formHtml && STATE.answeredQs.size < 3 && PAID_QUESTIONS <= 0) {
+  // Check if this is a paid question — every 3 questions costs $5
+  if (formHtml && !STATE.answeredQs.has(id) && PAID_QUESTIONS <= 0) {
     // Need payment — redirect to Stripe
     if (STRIPE_PAYMENT_LINKS.three_questions) {
       window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
@@ -3617,7 +3780,6 @@ function answerQuestion(id) {
   // Deduct from paid questions if applicable
   if (formHtml && PAID_QUESTIONS > 0 && !STATE.answeredQs.has(id)) {
     PAID_QUESTIONS--;
-    // Save to localStorage
     try {
       const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
       payment.usedQuestions = (payment.usedQuestions || 0) + 1;
