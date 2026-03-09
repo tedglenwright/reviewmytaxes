@@ -25,29 +25,115 @@
     --yellow: #eab308; --orange: #f97316;
     --text: #f8fafc; --text-muted: #94a3b8; --text-dim: #64748b;
     --draft-bg: rgba(239, 68, 68, 0.10);
+    --gradient-start: #3b82f6; --gradient-end: #22c55e;
+    --glass-bg: rgba(30, 41, 59, 0.6); --glass-border: rgba(71, 85, 105, 0.4);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
   .container { max-width: 920px; margin: 0 auto; padding: 24px; }
   button { cursor: pointer; font-family: inherit; }
   table { border-collapse: collapse; width: 100%; }
 
-  /* Upload screen */
-  .upload-hero { text-align: center; margin-bottom: 32px; }
-  .upload-hero h1 { font-size: 28px; font-weight: 800; }
+  /* -- CSS Animations -- */
+  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(59,130,246,0), 0 0 60px rgba(34,197,94,0); }
+    50% { box-shadow: 0 0 20px rgba(59,130,246,0.12), 0 0 60px rgba(34,197,94,0.06); }
+  }
+  @keyframes gradient-shift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+  @keyframes fade-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes upload-bounce { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-8px); } 60% { transform: translateY(-4px); } }
+  @keyframes orb-drift-1 { 0%, 100% { transform: translate(0,0) scale(1); } 33% { transform: translate(30px,-20px) scale(1.1); } 66% { transform: translate(-20px,10px) scale(0.95); } }
+  @keyframes orb-drift-2 { 0%, 100% { transform: translate(0,0) scale(1); } 33% { transform: translate(-25px,15px) scale(0.9); } 66% { transform: translate(15px,-25px) scale(1.05); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* -- Upload Hero -- */
+  .upload-hero-wrapper {
+    position: relative; overflow: hidden; border-radius: 24px;
+    margin-bottom: 40px; padding: 64px 24px 52px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(34,197,94,0.06) 50%, rgba(139,92,246,0.08) 100%);
+    border: 1px solid rgba(71, 85, 105, 0.25);
+  }
+  .upload-hero-wrapper::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 50%, rgba(34,197,94,0.10) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .hero-orb { position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none; opacity: 0.5; }
+  .hero-orb-1 { width: 200px; height: 200px; top: -40px; left: -40px; background: rgba(59,130,246,0.25); animation: orb-drift-1 12s ease-in-out infinite; }
+  .hero-orb-2 { width: 160px; height: 160px; bottom: -30px; right: -30px; background: rgba(34,197,94,0.2); animation: orb-drift-2 15s ease-in-out infinite; }
+  .hero-orb-3 { width: 120px; height: 120px; top: 30%; right: 15%; background: rgba(139,92,246,0.18); animation: orb-drift-1 18s ease-in-out infinite reverse; }
+
+  .upload-hero { text-align: center; position: relative; z-index: 1; animation: fade-up 0.6s ease-out; margin-bottom: 0; }
+  .upload-hero h1 {
+    font-size: 46px; font-weight: 900; letter-spacing: -1.5px; line-height: 1.1;
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end), #a78bfa, var(--gradient-start));
+    background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    animation: gradient-shift 6s ease infinite;
+  }
+  .upload-hero .hero-subtitle { font-size: 19px; color: var(--text); font-weight: 500; margin-top: 12px; line-height: 1.5; }
+  .upload-hero .hero-tagline { color: var(--text-muted); font-size: 15px; margin-top: 8px; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.5; }
   .upload-hero p { color: var(--text-muted); font-size: 15px; margin-top: 8px; }
+  .trust-badges { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+  .trust-badge {
+    display: inline-flex; align-items: center; gap: 6px; border-radius: 20px; padding: 6px 16px;
+    font-size: 12px; font-weight: 600; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .trust-badge:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .trust-badge--private { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: var(--green); }
+  .trust-badge--free { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); color: var(--accent-light); }
+  .trust-badge--oss { background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); color: #c4b5fd; text-decoration: none; }
   .draft-badge { display: inline-block; background: var(--draft-bg); border: 1px solid var(--red); border-radius: 6px; padding: 4px 12px; margin-top: 8px; color: var(--red); font-size: 12px; font-weight: 600; }
 
+  /* -- Glassmorphism -- */
+  .glass { background: var(--glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--glass-border); }
+
+  /* -- Drop Zone -- */
   .drop-zone {
-    border: 2px dashed var(--border); border-radius: 12px; padding: 40px;
+    border: 2px dashed var(--border); border-radius: 16px; padding: 48px 40px;
     text-align: center; margin-bottom: 24px; cursor: pointer;
-    background: var(--surface); transition: border-color 0.2s, background 0.2s;
+    background: var(--glass-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: border-color 0.3s, background 0.3s, box-shadow 0.3s, transform 0.2s;
+    animation: fade-up 0.6s ease-out 0.15s both, pulse-glow 4s ease-in-out infinite 1s;
+    position: relative; overflow: hidden;
   }
-  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+  .drop-zone::before {
+    content: ''; position: absolute; inset: 0; border-radius: 14px;
+    background: radial-gradient(ellipse at center, rgba(59,130,246,0.04) 0%, transparent 70%);
+    pointer-events: none; transition: opacity 0.3s; opacity: 0;
+  }
+  .drop-zone:hover::before { opacity: 1; }
+  .drop-zone:hover {
+    border-color: var(--accent); background: rgba(59,130,246,0.06);
+    box-shadow: 0 0 30px rgba(59,130,246,0.12), 0 8px 32px rgba(0,0,0,0.2); transform: translateY(-2px);
+  }
+  .drop-zone.dragover {
+    border-color: var(--green); background: rgba(34,197,94,0.08);
+    box-shadow: 0 0 40px rgba(34,197,94,0.15), 0 8px 32px rgba(0,0,0,0.2); transform: translateY(-2px);
+  }
+  .drop-zone .upload-icon-wrap {
+    width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 16px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(34,197,94,0.10));
+    display: flex; align-items: center; justify-content: center; transition: transform 0.3s;
+  }
+  .drop-zone:hover .upload-icon-wrap { animation: upload-bounce 0.6s ease; }
+  .drop-zone .upload-icon-wrap svg { width: 28px; height: 28px; }
   .drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
-  .drop-zone .title { font-size: 16px; font-weight: 600; }
-  .drop-zone .subtitle { color: var(--text-muted); font-size: 13px; margin-top: 8px; }
+  .drop-zone .title { font-size: 17px; font-weight: 700; color: var(--text); }
+  .drop-zone .subtitle { color: var(--text-muted); font-size: 14px; margin-top: 6px; }
   .drop-zone .hint { color: var(--text-dim); font-size: 12px; margin-top: 4px; }
+  .doc-pills { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .doc-pill {
+    padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+    background: rgba(59,130,246,0.10); color: var(--accent-light); border: 1px solid rgba(59,130,246,0.18);
+    transition: background 0.2s, transform 0.2s, border-color 0.2s;
+  }
+  .doc-pill:hover { background: rgba(59,130,246,0.2); transform: translateY(-1px); border-color: rgba(59,130,246,0.35); }
 
   .file-list { margin-bottom: 16px; }
   .file-item {
@@ -66,22 +152,23 @@
   .file-remove:hover { color: var(--red); }
 
   .btn-primary {
-    width: 100%; padding: 14px; background: var(--accent); color: #fff;
-    border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
-    transition: background 0.2s;
+    width: 100%; padding: 16px; background: linear-gradient(135deg, var(--accent), #2563eb); color: #fff;
+    border: none; border-radius: 12px; font-size: 16px; font-weight: 700;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+    box-shadow: 0 4px 16px rgba(59,130,246,0.25);
   }
-  .btn-primary:hover { background: #2563eb; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(59,130,246,0.35); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
   .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
   .demo-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 8px; padding: 16px; text-align: left;
-    transition: border-color 0.2s; cursor: pointer; font-family: inherit;
+    background: var(--glass-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border); border-radius: 12px; padding: 18px; text-align: left;
+    transition: border-color 0.3s, transform 0.2s, box-shadow 0.2s; cursor: pointer; font-family: inherit;
     color: inherit;
   }
-  .demo-card:hover { border-color: var(--accent); }
-  .demo-card .label { font-weight: 600; font-size: 14px; }
+  .demo-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+  .demo-card .label { font-weight: 700; font-size: 14px; }
   .demo-card .desc { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
 
   /* Progress bar */
@@ -214,6 +301,9 @@
   .form8949-table .center { text-align: center; }
   .form8949-table .muted { color: var(--text-muted); }
 
+  /* Scenario compare */
+  .scenario-btn:hover { border-color: var(--accent) !important; background: rgba(59,130,246,0.05) !important; }
+
   /* Assumptions */
   .assumption-card {
     background: var(--surface); border: 1px solid var(--border);
@@ -238,15 +328,23 @@
   .answered-label { color: var(--green); font-size: 11px; }
 
   /* Pricing */
-  .pricing-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 20px; }
+  .pricing-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 24px; }
   .pricing-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 20px; text-align: center;
+    background: var(--glass-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border); border-radius: 16px; padding: 28px 20px; text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
   }
-  .pricing-card.featured { border: 2px solid var(--accent); }
+  .pricing-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,0.2); }
+  .pricing-card.featured {
+    border: 2px solid transparent;
+    background-image: linear-gradient(var(--surface), var(--surface)), linear-gradient(135deg, var(--accent), #a78bfa);
+    background-origin: border-box; background-clip: padding-box, border-box;
+    box-shadow: 0 4px 20px rgba(59,130,246,0.15);
+  }
+  .pricing-card.featured:hover { box-shadow: 0 12px 36px rgba(59,130,246,0.25); }
   .pricing-card.green { border-color: var(--green-dark); }
-  .pricing-card .price { font-size: 32px; font-weight: 800; }
-  .pricing-card .plan { color: var(--text-muted); font-size: 13px; margin: 8px 0 16px; }
+  .pricing-card .price { font-size: 36px; font-weight: 900; }
+  .pricing-card .plan { color: var(--text-muted); font-size: 13px; margin: 10px 0 18px; }
   .pricing-card .features { color: var(--text-dim); font-size: 12px; line-height: 1.8; }
 
   .footer-disclaimer {
@@ -258,28 +356,35 @@
 
   /* Privacy / Security */
   .privacy-banner {
-    background: rgba(34, 197, 94, 0.08); border: 1px solid var(--green-dark);
-    border-radius: 10px; padding: 16px 20px; margin-bottom: 24px;
-    display: flex; gap: 14px; align-items: flex-start;
+    background: rgba(34, 197, 94, 0.06); border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 14px; padding: 20px 24px; margin-bottom: 24px;
+    display: flex; gap: 16px; align-items: flex-start;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    animation: fade-up 0.6s ease-out 0.2s both;
+    transition: border-color 0.2s;
   }
-  .privacy-banner .shield { font-size: 32px; flex-shrink: 0; line-height: 1; }
-  .privacy-banner .headline { color: var(--green); font-weight: 700; font-size: 15px; }
-  .privacy-banner .detail { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; margin-top: 4px; }
+  .privacy-banner:hover { border-color: rgba(34,197,94,0.4); }
+  .privacy-banner .shield { font-size: 36px; flex-shrink: 0; line-height: 1; }
+  .privacy-banner .headline { color: var(--green); font-weight: 800; font-size: 16px; }
+  .privacy-banner .detail { color: var(--text-muted); font-size: 13px; line-height: 1.6; margin-top: 6px; }
   .privacy-banner .detail strong { color: var(--text); }
 
-  .security-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .security-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; animation: fade-up 0.6s ease-out 0.3s both; }
   .security-card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    padding: 14px; text-align: center;
+    background: var(--glass-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border); border-radius: 12px;
+    padding: 18px; text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
   }
-  .security-card .sec-icon { font-size: 24px; margin-bottom: 6px; }
-  .security-card .sec-title { color: var(--text); font-weight: 600; font-size: 13px; }
-  .security-card .sec-desc { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.4; }
+  .security-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); border-color: rgba(99,102,241,0.3); }
+  .security-card .sec-icon { font-size: 28px; margin-bottom: 8px; }
+  .security-card .sec-title { color: var(--text); font-weight: 700; font-size: 14px; }
+  .security-card .sec-desc { color: var(--text-dim); font-size: 11px; margin-top: 6px; line-height: 1.5; }
 
   .network-monitor {
     display: flex; align-items: center; gap: 8px; justify-content: center;
-    padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600;
-    margin-bottom: 16px;
+    padding: 10px 16px; border-radius: 10px; font-size: 12px; font-weight: 600;
+    margin-bottom: 20px; animation: fade-up 0.6s ease-out 0.35s both;
   }
   .network-monitor.safe { background: rgba(34,197,94,0.08); border: 1px solid var(--green-dark); color: var(--green); }
   .network-monitor.warning { background: rgba(239,68,68,0.08); border: 1px solid var(--red-dark); color: var(--red); }
@@ -288,20 +393,27 @@
   .network-dot.warning { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-  .how-it-works { margin-bottom: 28px; }
+  .how-it-works { margin-bottom: 32px; animation: fade-up 0.6s ease-out 0.4s both; }
   .how-it-works summary {
-    color: var(--accent-light); font-size: 13px; font-weight: 600; cursor: pointer;
-    text-align: center; padding: 8px;
+    color: var(--accent-light); font-size: 14px; font-weight: 700; cursor: pointer;
+    text-align: center; padding: 10px; transition: color 0.2s;
   }
   .how-it-works summary:hover { color: var(--text); }
-  .how-steps { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 12px; }
+  .how-steps { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 14px; }
   .how-step {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px; text-align: center;
+    background: var(--glass-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border); border-radius: 12px;
+    padding: 16px; text-align: center;
+    transition: transform 0.2s, border-color 0.2s;
   }
-  .how-step .step-num { color: var(--accent); font-size: 20px; font-weight: 800; }
-  .how-step .step-title { color: var(--text); font-size: 12px; font-weight: 600; margin-top: 4px; }
-  .how-step .step-desc { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.4; }
+  .how-step:hover { transform: translateY(-2px); border-color: rgba(59,130,246,0.3); }
+  .how-step .step-num {
+    color: var(--accent-light); font-size: 22px; font-weight: 900;
+    background: linear-gradient(135deg, var(--accent), var(--green));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .how-step .step-title { color: var(--text); font-size: 13px; font-weight: 700; margin-top: 6px; }
+  .how-step .step-desc { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.5; }
   .how-arrow { color: var(--text-dim); font-size: 18px; display: flex; align-items: center; }
 
   .verify-badge {
@@ -313,10 +425,14 @@
   .verify-badge:hover { background: rgba(34,197,94,0.18); }
 
   .oss-banner {
-    background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(139,92,246,0.10));
-    border: 1px solid rgba(139,92,246,0.3); border-radius: 10px;
-    padding: 16px 20px; margin-bottom: 20px; display: flex; gap: 14px; align-items: flex-start;
+    background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08));
+    border: 1px solid rgba(139,92,246,0.2); border-radius: 14px;
+    padding: 20px 24px; margin-bottom: 20px; display: flex; gap: 16px; align-items: flex-start;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    animation: fade-up 0.6s ease-out 0.25s both;
+    transition: border-color 0.2s;
   }
+  .oss-banner:hover { border-color: rgba(139,92,246,0.45); }
   .oss-banner .gh-icon { font-size: 28px; flex-shrink: 0; line-height: 1; }
   .oss-banner .oss-headline { color: #a78bfa; font-weight: 700; font-size: 15px; }
   .oss-banner .oss-detail { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; margin-top: 4px; }
@@ -332,11 +448,11 @@
   .oss-badge:hover { background: rgba(139,92,246,0.22); }
 
   .gh-footer {
-    text-align: center; padding: 16px; margin-top: 24px;
-    border-top: 1px solid var(--border);
+    text-align: center; padding: 20px; margin-top: 32px;
+    border-top: 1px solid var(--glass-border); animation: fade-up 0.6s ease-out 0.5s both;
   }
-  .gh-footer a { color: var(--accent-light); text-decoration: none; font-size: 12px; font-weight: 600; }
-  .gh-footer a:hover { text-decoration: underline; }
+  .gh-footer a { color: var(--accent-light); text-decoration: none; font-size: 12px; font-weight: 600; transition: color 0.2s; }
+  .gh-footer a:hover { text-decoration: underline; color: var(--text); }
 
   /* Toast notification */
   .impact-toast {
@@ -404,8 +520,11 @@
     .source-modal { width: 95vw; height: 90vh; }
     .tabs { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .tab-btn { padding: 10px 14px; font-size: 13px; white-space: nowrap; }
-    .upload-hero h1 { font-size: 22px; }
-    .drop-zone { padding: 24px; }
+    .upload-hero h1 { font-size: 30px; }
+    .upload-hero-wrapper { padding: 40px 16px 36px; margin-bottom: 24px; }
+    .trust-badges { gap: 6px; }
+    .trust-badge { padding: 5px 12px; font-size: 11px; }
+    .drop-zone { padding: 28px 16px; }
     .refund-box .amount { font-size: 28px; }
     .line-item { font-size: 13px; }
     .section-header .title { font-size: 14px; }
@@ -1518,6 +1637,19 @@ function computeTaxReturn(data) {
   const otherMiscIncome = data.otherMiscIncome || 0;
   const otherIncome = priorRefund + gamblingIncome + alimonyReceived + rentalIncome + otherMiscIncome;
 
+  // Schedule E — Rental Income
+  let schedENet = 0;
+  if (data.scheduleE && data.scheduleE.length > 0) {
+    data.scheduleE.forEach(prop => {
+      const grossRent = prop.rents || 0;
+      const expenses = (prop.advertising||0) + (prop.insurance||0) + (prop.repairs||0) +
+        (prop.taxes||0) + (prop.utilities||0) + (prop.mortgage||0) + (prop.depreciation||0) + (prop.other||0);
+      prop._netIncome = grossRent - expenses;
+      schedENet += prop._netIncome;
+    });
+    schedules.E = { properties: data.scheduleE, totalNet: schedENet };
+  }
+
   const capGainIncome = Math.max(netSTCG + netLTCG, -TAX.capitalLossLimit);
 
   // Social Security Benefits (SSA-1099)
@@ -1540,8 +1672,9 @@ function computeTaxReturn(data) {
     assumptions.push({ id:'ssa_taxable', text:`${Math.round(ssaTaxable / data.ssaBenefits * 100)}% of Social Security benefits ($${ssaTaxable.toLocaleString()} of $${data.ssaBenefits.toLocaleString()}) included in income`, impact:'high' });
   }
 
-  // Total Income
-  const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome + totalRetirement + otherIncome + ssaTaxable;
+  // Total Income (exclude manual rentalIncome from otherIncome if Schedule E is used to avoid double-counting)
+  const schedEAdjustedOther = (data.scheduleE && data.scheduleE.length > 0) ? (otherIncome - rentalIncome) : otherIncome;
+  const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome + totalRetirement + schedEAdjustedOther + ssaTaxable + schedENet;
 
   // Additional adjustments from user input
   const hsaDed = Math.min(data.hsaContribution || 0, fs === 'mfj' ? 8550 : 4300);
@@ -1612,6 +1745,20 @@ function computeTaxReturn(data) {
     niit = Math.round(Math.min(investIncome, agi - TAX.niitThreshold[fs]) * TAX.niitRate);
   }
 
+  // Alternative Minimum Tax (AMT)
+  let amt = 0;
+  const amtExemption = { single: 88100, mfj: 137000, mfs: 68500, hoh: 88100 };
+  const amtPhaseout = { single: 609350, mfj: 1252700, mfs: 626350, hoh: 609350 };
+  const amti = agi + (data.itemized ? Math.min((data.itemized.stateTaxes||0) + (data.itemized.propertyTaxes||0) + totalStateWithheld, TAX.saltCap[fs]) : 0);
+  let exemption = amtExemption[fs];
+  if (amti > amtPhaseout[fs]) {
+    exemption = Math.max(0, exemption - (amti - amtPhaseout[fs]) * 0.25);
+  }
+  const amtIncome = Math.max(0, amti - exemption);
+  const amtTax = amtIncome <= 239100 ? amtIncome * 0.26 : 239100 * 0.26 + (amtIncome - 239100) * 0.28;
+  const tentativeMinTax = Math.round(amtTax);
+  amt = Math.max(0, tentativeMinTax - incomeTax);
+
   // Credits
   const numChildren = data.numChildren || 0;
   const numOtherDeps = data.numOtherDeps || 0;
@@ -1626,11 +1773,32 @@ function computeTaxReturn(data) {
   const totalRefundableCredits = eitcCredit;
   const totalCredits = totalNonrefundableCredits + totalRefundableCredits;
 
-  schedules['2'] = { seTax, niit, totalAdditionalTax: seTax + niit };
+  schedules['2'] = { seTax, niit, amt, totalAdditionalTax: seTax + niit + amt };
   schedules['3'] = { childTaxCredit, otherDepCredit, educationCredit, eitcCredit, childCareCredit, saversCredit, energyCredit, totalNonrefundableCredits, totalRefundableCredits, totalCredits };
 
-  const totalTax = Math.max(0, incomeTax - totalNonrefundableCredits) + seTax + niit;
-  const totalPayments = totalFedWithheld + (data.estimatedPayments||0) + totalRefundableCredits;
+  // Premium Tax Credit (Form 8962)
+  let ptcReconciliation = 0;
+  if (data.premiumTaxCredit) {
+    const ptc = data.premiumTaxCredit;
+    const annualSLCSP = (ptc.slcspPremium || 0) * 12;
+    const advancePTC = ptc.advancePTC || 0;
+    const fplSize = 1 + (data.dependents || 0) + (fs === 'mfj' || fs === 'mfs' ? 1 : 0);
+    const fpl = 15060 + (fplSize - 1) * 5380;
+    const fplRatio = agi / fpl;
+    let applicablePct = 0;
+    if (fplRatio >= 1 && fplRatio <= 1.5) applicablePct = 0.02;
+    else if (fplRatio <= 2) applicablePct = 0.04;
+    else if (fplRatio <= 2.5) applicablePct = 0.06;
+    else if (fplRatio <= 3) applicablePct = 0.08;
+    else if (fplRatio <= 4) applicablePct = 0.085;
+    const expectedContribution = Math.round(agi * applicablePct);
+    const totalPTC = fplRatio >= 1 && fplRatio <= 4 ? Math.max(0, annualSLCSP - expectedContribution) : 0;
+    ptcReconciliation = totalPTC - advancePTC;
+    schedules['8962'] = { annualSLCSP, expectedContribution, totalPTC, advancePTC, reconciliation: ptcReconciliation, fplRatio: fplRatio.toFixed(1) };
+  }
+
+  const totalTax = Math.max(0, incomeTax - totalNonrefundableCredits) + seTax + niit + amt;
+  const totalPayments = totalFedWithheld + (data.estimatedPayments||0) + totalRefundableCredits + ptcReconciliation;
   const refundOrOwed = totalPayments - totalTax;
 
   // Default assumptions — always let user change filing status
@@ -1646,7 +1814,11 @@ function computeTaxReturn(data) {
   if (!data.hsaContribution && !data.iraContribution && !data.studentLoanInterest) assumptions.push({ id:'no_hsa', text:'Did not account for HSA, IRA contributions, or student loan interest', impact:'medium' });
   if (!data.educatorExpenses && !data.alimonyPaid && !data.movingExpenses) assumptions.push({ id:'other_deductions', text:'Did not include educator expenses, alimony paid, or moving expenses', impact:'low' });
   if (!data.gamblingIncome && !data.alimonyReceived && !data.rentalIncome && !data.otherMiscIncome) assumptions.push({ id:'other_income', text:'Did not include other income: gambling, alimony, rental, jury duty, etc.', impact:'medium' });
+  if (!data.scheduleE || data.scheduleE.length === 0) {
+    assumptions.push({ id:'schedule_e', text:'No rental/royalty income reported — add Schedule E if you have rental properties', impact:'medium' });
+  }
   if (!data.priorRefund) assumptions.push({ id:'prior_refund', text:'Did not include prior-year state/local tax refund (taxable if you itemized last year)', impact:'medium' });
+  if (!data.premiumTaxCredit) assumptions.push({ id:'ptc', text:'Did not calculate Premium Tax Credit — add if you had Marketplace health insurance', impact:'medium' });
 
   // State tax
   let stateResult = null;
@@ -1657,7 +1829,11 @@ function computeTaxReturn(data) {
     assumptions.push({ id:'select_state', text:'No state selected — select your state for a state tax estimate', impact:'medium' });
   }
 
-  assumptions.push({ id:'no_amt', text:'Did not calculate Alternative Minimum Tax (AMT)', impact:'medium' });
+  if (amt > 0) {
+    assumptions.push({ id:'amt_applies', text:`Alternative Minimum Tax of $${amt.toLocaleString()} applies — SALT add-back and AMT exemption phaseout`, impact:'high' });
+  } else {
+    assumptions.push({ id:'no_amt', text:'AMT does not apply (regular tax exceeds tentative minimum tax)', impact:'low' });
+  }
 
   return {
     filingStatus: fs,
@@ -1669,10 +1845,10 @@ function computeTaxReturn(data) {
     totalWages, totalInterest, totalOrdDiv, totalQualDiv, totalRetirement,
     ssaBenefits: data.ssaBenefits || 0, ssaTaxable, ssaFedWithheld,
     retirementDist: data.retirementDist || [],
-    schedCNet, netSTCG, netLTCG, capitalLossCarryover,
+    schedCNet, schedENet, netSTCG, netLTCG, capitalLossCarryover,
     totalIncome, otherIncome, adjustments, agi, deduction, usingItemized,
     qbiDeduction, taxableIncome, ordinaryTax, ltcgTax, incomeTax,
-    seTax, niit, totalTax, totalFedWithheld, totalStateWithheld,
+    seTax, niit, amt, ptcReconciliation, totalTax, totalFedWithheld, totalStateWithheld,
     estimatedPayments: data.estimatedPayments||0,
     totalPayments, refundOrOwed, assumptions, schedules,
     stateResult,
@@ -1994,14 +2170,28 @@ function renderUpload() {
   app.innerHTML = `
     <div class="container">
       <div style="text-align:right;margin-bottom:-20px"><span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span></div>
-      <div class="upload-hero">
-        <h1>ReviewMyTaxes</h1>
-        <p style="font-size:17px;color:var(--text);font-weight:600;margin-top:4px">See your tax return before you file</p>
-        <p>Upload your W-2s and 1099s — get an instant draft Form 1040 with all schedules in seconds</p>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap">
-          <div class="draft-badge">100% FREE PREVIEW</div>
-          <div class="draft-badge" style="background:rgba(34,197,94,0.1);border-color:var(--green);color:var(--green)">100% PRIVATE</div>
-          <div class="draft-badge" style="background:rgba(59,130,246,0.1);border-color:var(--accent);color:var(--accent-light)">OPEN SOURCE</div>
+      <div class="upload-hero-wrapper">
+        <div class="hero-orb hero-orb-1"></div>
+        <div class="hero-orb hero-orb-2"></div>
+        <div class="hero-orb hero-orb-3"></div>
+        <div class="upload-hero">
+          <h1>ReviewMyTaxes</h1>
+          <div class="hero-subtitle">See your tax return before you file</div>
+          <div class="hero-tagline">Upload your W-2s and 1099s. Get an instant draft Form 1040 with all schedules — processed entirely in your browser. Private. Free. Open source.</div>
+          <div class="trust-badges">
+            <span class="trust-badge trust-badge--private">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              100% Private
+            </span>
+            <span class="trust-badge trust-badge--free">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Free Preview
+            </span>
+            <a class="trust-badge trust-badge--oss" href="${GITHUB_REPO}" target="_blank" rel="noopener">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              Open Source
+            </a>
+          </div>
         </div>
       </div>
 
@@ -2153,19 +2343,25 @@ function renderUpload() {
 
       <div class="drop-zone" id="dropzone">
         <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.gif,.webp" style="display:none">
-        <div class="icon">&#x1f4c4;</div>
-        <div class="title">Drop your tax documents here</div>
-        <div class="subtitle" style="margin-top:4px">or click to browse files</div>
-        <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:12px">
-          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">W-2</span>
-          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-INT</span>
-          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-DIV</span>
-          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-NEC</span>
-          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-B</span>
-          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1099-MISC</span>
-          <span style="padding:3px 8px;background:rgba(59,130,246,0.12);color:var(--accent-light);border-radius:4px;font-size:11px;font-weight:600">1098</span>
+        <div class="upload-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
         </div>
-        <div class="hint" style="margin-top:8px">PDF, JPG, PNG, TIFF — auto-detected and parsed in your browser</div>
+        <div class="title">Drop your tax documents here</div>
+        <div class="subtitle">or click to browse files</div>
+        <div class="doc-pills">
+          <span class="doc-pill">W-2</span>
+          <span class="doc-pill">1099-INT</span>
+          <span class="doc-pill">1099-DIV</span>
+          <span class="doc-pill">1099-NEC</span>
+          <span class="doc-pill">1099-B</span>
+          <span class="doc-pill">1099-MISC</span>
+          <span class="doc-pill">1098</span>
+        </div>
+        <div class="hint" style="margin-top:10px">PDF, JPG, PNG, TIFF — auto-detected and parsed entirely in your browser</div>
       </div>
 
       ${STATE.files.length > 0 ? `
@@ -2186,8 +2382,8 @@ function renderUpload() {
       ` : ''}
 
       ${STATE.files.length === 0 ? `
-      <div style="margin-top: 24px">
-        <div style="color: var(--text-dim); font-size: 12px; text-align: center; margin-bottom: 12px;">— or try with sample data (not your documents) —</div>
+      <div style="margin-top: 28px; animation: fade-up 0.6s ease-out 0.3s both;">
+        <div style="color: var(--text-dim); font-size: 12px; text-align: center; margin-bottom: 12px; font-weight: 500;">— or try with sample data (not your documents) —</div>
         <div class="demo-grid">
           ${Object.entries(DEMOS).map(([key, d]) => `
             <button class="demo-card" onclick="loadDemo('${key}')">
@@ -2201,8 +2397,8 @@ function renderUpload() {
       ` : ''}
 
       <!-- FAQ -->
-      <details style="margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0">
-        <summary style="padding:16px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text)">Frequently Asked Questions</summary>
+      <details style="margin-top:28px;background:var(--glass-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--glass-border);border-radius:14px;padding:0;animation:fade-up 0.6s ease-out 0.45s both">
+        <summary style="padding:18px;cursor:pointer;font-size:15px;font-weight:700;color:var(--text);transition:color 0.2s">Frequently Asked Questions</summary>
         <div style="padding:0 16px 16px;font-size:13px;color:var(--text-muted);line-height:1.6">
           <div style="margin-bottom:12px">
             <div style="font-weight:600;color:var(--text)">Is this a real tax return?</div>
@@ -2317,12 +2513,14 @@ function renderReview() {
       <button class="tab-btn ${STATE.tab==='assumptions'?'active':''}" onclick="setTab('assumptions')">Refine (${r.assumptions.filter(a=>!STATE.answeredQs.has(a.id)).length})</button>
       <button class="tab-btn ${STATE.tab==='documents'?'active':''}" onclick="setTab('documents')">Documents</button>
       <button class="tab-btn ${STATE.tab==='pricing'?'active':''}" onclick="setTab('pricing')">Pricing</button>
+      <button class="tab-btn ${STATE.tab==='compare'?'active':''}" onclick="setTab('compare')">Compare</button>
     </div>
     <div class="container tab-fade-in">
       ${STATE.tab === 'return' ? renderReturn(r) : ''}
       ${STATE.tab === 'assumptions' ? renderAssumptions(r) : ''}
       ${STATE.tab === 'documents' ? renderDocuments(r) : ''}
       ${STATE.tab === 'pricing' ? renderPricing() : ''}
+      ${STATE.tab === 'compare' ? renderCompare(r) : ''}
     </div>
   `;
 }
@@ -2434,6 +2632,7 @@ function renderReturn(r) {
         })() : ''}
         ${r.schedCNet !== 0 ? lineItem('8. Business income (Schedule C)', r.schedCNet, {onClick: r._necSources.length > 0 ? 'showNECSource()' : ''}) : ''}
         ${(r.netSTCG + r.netLTCG) !== 0 ? lineItem('7. Capital gain/loss (Schedule D)', r.netSTCG + r.netLTCG, {showSign:true, onClick: r.schedules.form8949 && r.schedules.form8949.some(t=>t._sourceURL) ? 'showCapGainSource(0)' : ''}) : ''}
+        ${r.schedENet !== 0 ? lineItem('Schedule E rental income', r.schedENet, {showSign:true}) : ''}
         ${r.otherIncome > 0 ? lineItem('8. Other income (Schedule 1)', r.otherIncome) : ''}
         ${r.schedules['1'].priorRefund > 0 ? lineItem('   Prior-year refund', r.schedules['1'].priorRefund, {sub:true}) : ''}
         ${r.schedules['1'].gamblingIncome > 0 ? lineItem('   Gambling winnings', r.schedules['1'].gamblingIncome, {sub:true}) : ''}
@@ -2478,6 +2677,7 @@ function renderReturn(r) {
         })() : ''}
         ${r.seTax > 0 ? lineItem('23. Self-employment tax (Schedule SE)', r.seTax) : ''}
         ${r.niit > 0 ? lineItem('Net investment income tax (3.8%)', r.niit) : ''}
+        ${r.amt > 0 ? lineItem('Alternative Minimum Tax (Form 6251)', r.amt) : ''}
         ${lineItem('24. Total tax', r.totalTax, {bold:true})}
 
         ${sectionHeader('Payments', 'Lines 25–33')}
@@ -2492,6 +2692,13 @@ function renderReturn(r) {
         })() : ''}
         ${r.estimatedPayments > 0 ? lineItem('26. Estimated tax payments', r.estimatedPayments) : ''}
         ${r.schedules['3'].eitcCredit > 0 ? lineItem('27. Earned income credit (EITC)', r.schedules['3'].eitcCredit) : ''}
+        ${r.schedules['8962'] ? (() => {
+          const s = r.schedules['8962'];
+          let ptcHtml = lineItem('Premium Tax Credit (Form 8962)', s.totalPTC);
+          if (s.advancePTC > 0) ptcHtml += lineItem('   Advance PTC received', -s.advancePTC, {sub:true});
+          ptcHtml += lineItem('   PTC reconciliation', s.reconciliation, {sub:true, showSign:true});
+          return ptcHtml;
+        })() : ''}
         ${lineItem('33. Total payments & credits', r.totalPayments, {bold:true})}
 
         ${sectionHeader(r.refundOrOwed >= 0 ? 'Refund' : 'Amount You Owe', r.refundOrOwed >= 0 ? 'Line 34' : 'Line 37')}
@@ -2656,6 +2863,18 @@ function renderReturn(r) {
     if (se.additionalMedicare > 0) html += lineItem('Additional Medicare tax', se.additionalMedicare, {indent:true});
     html += lineItem('Total SE tax', se.totalSETax, {bold:true});
     html += lineItem('Deductible portion (½)', se.deduction, {sub:true});
+  }
+
+  // Schedule E
+  if (r.schedules.E) {
+    html += sectionHeader('Schedule E — Rental Income', 'Supplemental Income');
+    r.schedules.E.properties.forEach((p, i) => {
+      html += lineItem(esc(p.description) || 'Property ' + (i+1) + ' gross rents', p.rents);
+      const exp = (p.mortgage||0)+(p.taxes||0)+(p.insurance||0)+(p.repairs||0)+(p.depreciation||0)+(p.utilities||0);
+      if (exp > 0) html += lineItem('   Total expenses', exp, {sub:true});
+      html += lineItem('   Net income', p._netIncome, {sub:true, showSign:true});
+    });
+    html += lineItem('Total Schedule E', r.schedules.E.totalNet, {bold:true, showSign:true});
   }
 
   // Schedule D
@@ -3238,6 +3457,150 @@ function setTab(t) {
   render();
 }
 
+// ═══════════════════════════════════════════════════════════════
+// SCENARIO COMPARISON
+// ═══════════════════════════════════════════════════════════════
+
+function compareRow(label, current, scenario) {
+  const diff = scenario - current;
+  return '<tr style="border-bottom:1px solid var(--surface-light)">' +
+    '<td style="padding:6px;color:var(--text-muted)">' + label + '</td>' +
+    '<td style="text-align:right;padding:6px;color:var(--text)">$' + fmt(current) + '</td>' +
+    '<td style="text-align:right;padding:6px;color:var(--text)">$' + fmt(scenario) + '</td>' +
+    '<td style="text-align:right;padding:6px;color:' + (diff < 0 ? 'var(--green)' : diff > 0 ? 'var(--red)' : 'var(--text-dim)') + ';font-weight:' + (diff !== 0 ? '600' : '400') + '">' + (diff !== 0 ? (diff > 0 ? '+' : '') + '$' + fmt(diff) : '—') + '</td>' +
+    '</tr>';
+}
+
+function renderCompare(r) {
+  const scenarios = [
+    { id: 'fs_mfj', label: 'File as Married Filing Jointly', show: r.filingStatus !== 'mfj' },
+    { id: 'fs_mfs', label: 'File as Married Filing Separately', show: r.filingStatus !== 'mfs' },
+    { id: 'fs_single', label: 'File as Single', show: r.filingStatus !== 'single' },
+    { id: 'fs_hoh', label: 'File as Head of Household', show: r.filingStatus !== 'hoh' },
+    { id: 'ira', label: 'Contribute $7,000 to Traditional IRA' },
+    { id: 'hsa_single', label: 'Max HSA ($4,300 individual)', show: r.filingStatus !== 'mfj' },
+    { id: 'hsa_family', label: 'Max HSA ($8,550 family)', show: r.filingStatus === 'mfj' },
+    { id: 'dependent1', label: 'Add 1 qualifying child' },
+    { id: 'itemize', label: 'Itemize deductions', show: !r.usingItemized },
+    { id: 'charity5k', label: 'Donate $5,000 to charity' },
+  ];
+
+  let html = '<div style="margin-bottom:20px">' +
+    '<h2 style="font-size:18px;font-weight:700">Scenario Comparison</h2>' +
+    '<p style="color:var(--text-muted);font-size:13px;margin-top:4px">' +
+    'See how different choices affect your tax return. Click a scenario to compare.</p></div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:24px">';
+
+  scenarios.filter(function(s) { return s.show !== false; }).forEach(function(s) {
+    html += '<button onclick="runScenario(\'' + s.id + '\')" class="scenario-btn" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:left;cursor:pointer;color:var(--text);font-family:inherit;font-size:13px;transition:border-color 0.2s">' +
+      s.label + '</button>';
+  });
+
+  html += '</div><div id="compare-result"></div>';
+  return html;
+}
+
+function runScenario(scenarioId) {
+  // Check payment gate — comparisons count as questions (but don't charge for re-runs)
+  var compareKey = 'compare_' + scenarioId;
+  if (!STATE.answeredQs.has(compareKey)) {
+    if (STATE.answeredQs.size < 3 && PAID_QUESTIONS <= 0) {
+      if (STRIPE_PAYMENT_LINKS.three_questions) {
+        window.location.href = STRIPE_PAYMENT_LINKS.three_questions;
+        return;
+      }
+    }
+    if (PAID_QUESTIONS > 0) {
+      PAID_QUESTIONS--;
+      try {
+        var payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
+        payment.usedQuestions = (payment.usedQuestions || 0) + 1;
+        localStorage.setItem('rmt_payment', JSON.stringify(payment));
+      } catch(e) {}
+    }
+    STATE.answeredQs.add(compareKey);
+    try { sessionStorage.setItem('rmt_answered', JSON.stringify([...STATE.answeredQs])); } catch(e) {}
+  }
+
+  var scenarioChanges = {
+    fs_mfj: { filingStatus: 'mfj' },
+    fs_mfs: { filingStatus: 'mfs' },
+    fs_single: { filingStatus: 'single' },
+    fs_hoh: { filingStatus: 'hoh' },
+    ira: { iraContribution: 7000 },
+    hsa_single: { hsaContribution: 4300 },
+    hsa_family: { hsaContribution: 8550 },
+    dependent1: { numChildren: (STATE.taxData.numChildren||0)+1, dependents: (STATE.taxData.dependents||0)+1 },
+    itemize: { itemized: { medical:0, stateTaxes:0, propertyTaxes:0, mortgageInterest:0, charitableCash:0, charitableNonCash:0 }},
+    charity5k: { itemized: Object.assign({}, STATE.taxData.itemized||{}, { charitableCash: ((STATE.taxData.itemized||{}).charitableCash||0)+5000 }) },
+  };
+
+  var changes = scenarioChanges[scenarioId];
+  if (!changes) return;
+
+  var altData = Object.assign({}, STATE.taxData, changes);
+  var altResult = computeTaxReturn(altData);
+  var current = STATE.result;
+
+  var el = document.getElementById('compare-result');
+  if (!el) return;
+
+  var diff = altResult.refundOrOwed - current.refundOrOwed;
+  var taxDiff = altResult.totalTax - current.totalTax;
+
+  var creditsRow = '';
+  try { creditsRow = compareRow('Credits', current.schedules['3'].totalCredits, altResult.schedules['3'].totalCredits); } catch(e) {}
+
+  var stateRow = '';
+  if (current.stateResult && altResult.stateResult) {
+    stateRow = compareRow('State Tax', current.stateResult.tax, altResult.stateResult.tax);
+  }
+
+  el.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:16px">' +
+    '<h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Comparison Results</h3>' +
+    '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:start">' +
+      '<div style="text-align:center">' +
+        '<div style="color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Current</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">' + FS_LABELS[current.filingStatus] + '</div>' +
+        '<div style="font-size:20px;font-weight:800;color:' + (current.refundOrOwed>=0?'var(--green)':'var(--red)') + '">' + (current.refundOrOwed>=0?'Refund':'Owed') + ': $' + fmt(Math.abs(current.refundOrOwed)) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">Tax: $' + fmt(current.totalTax) + ' · Rate: ' + current.effectiveRate.toFixed(1) + '%</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;font-size:24px;color:var(--text-dim);padding-top:20px">→</div>' +
+      '<div style="text-align:center">' +
+        '<div style="color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Scenario</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">' + FS_LABELS[altResult.filingStatus] + '</div>' +
+        '<div style="font-size:20px;font-weight:800;color:' + (altResult.refundOrOwed>=0?'var(--green)':'var(--red)') + '">' + (altResult.refundOrOwed>=0?'Refund':'Owed') + ': $' + fmt(Math.abs(altResult.refundOrOwed)) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-dim);margin-top:4px">Tax: $' + fmt(altResult.totalTax) + ' · Rate: ' + altResult.effectiveRate.toFixed(1) + '%</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-top:16px;padding:12px;border-radius:8px;text-align:center;font-size:14px;font-weight:700;' +
+      (diff > 0 ? 'background:rgba(34,197,94,0.1);border:1px solid var(--green-dark);color:var(--green)' : diff < 0 ? 'background:rgba(239,68,68,0.1);border:1px solid var(--red-dark);color:var(--red)' : 'background:var(--surface-light);color:var(--text-muted)') + '">' +
+      (diff > 0 ? 'You would get $' + fmt(diff) + ' more back' : diff < 0 ? 'You would get $' + fmt(Math.abs(diff)) + ' less back' : 'No difference') +
+      (taxDiff !== 0 ? ' <span style="font-size:12px;font-weight:400;opacity:0.8">(tax ' + (taxDiff < 0 ? 'saves' : 'costs') + ' $' + fmt(Math.abs(taxDiff)) + ')</span>' : '') +
+    '</div>' +
+    '<div style="margin-top:16px">' +
+      '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+        '<thead><tr style="border-bottom:1px solid var(--border)">' +
+          '<th style="text-align:left;padding:6px;color:var(--text-dim)">Line Item</th>' +
+          '<th style="text-align:right;padding:6px;color:var(--text-dim)">Current</th>' +
+          '<th style="text-align:right;padding:6px;color:var(--text-dim)">Scenario</th>' +
+          '<th style="text-align:right;padding:6px;color:var(--text-dim)">Diff</th>' +
+        '</tr></thead>' +
+        '<tbody>' +
+          compareRow('Total Income', current.totalIncome, altResult.totalIncome) +
+          compareRow('Adjustments', current.adjustments, altResult.adjustments) +
+          compareRow('AGI', current.agi, altResult.agi) +
+          compareRow('Deductions', current.deduction, altResult.deduction) +
+          compareRow('Taxable Income', current.taxableIncome, altResult.taxableIncome) +
+          compareRow('Income Tax', current.incomeTax, altResult.incomeTax) +
+          creditsRow +
+          compareRow('Total Tax', current.totalTax, altResult.totalTax) +
+          compareRow('Total Payments', current.totalPayments, altResult.totalPayments) +
+          stateRow +
+        '</tbody></table>' +
+    '</div></div>';
+}
+
 function answerQuestion(id) {
   const formHtml = getAssumptionForm(id);
 
@@ -3454,6 +3817,64 @@ function getAssumptionForm(id) {
           This income goes on Schedule 1 and is added to your total income. Gambling losses can offset winnings but only if you itemize.
         </div>
       `;
+    case 'schedule_e': {
+      const props = STATE.taxData.scheduleE || [{}];
+      let html = '<div style="margin-bottom:16px"><label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">Rental property income and expenses:</label>';
+      props.forEach((p, i) => {
+        html += `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">
+            <div style="color:var(--accent-light);font-size:12px;font-weight:600;margin-bottom:8px">Property ${i+1}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Property address/name</label>
+              <input type="text" class="sched-e-desc" value="${esc(p.description||'')}" placeholder="123 Main St" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Gross rents received</label>
+              <input type="number" class="sched-e-rents" min="0" value="${p.rents||0}" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Mortgage interest</label>
+              <input type="number" class="sched-e-mortgage" min="0" value="${p.mortgage||0}" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Property taxes</label>
+              <input type="number" class="sched-e-taxes" min="0" value="${p.taxes||0}" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Insurance</label>
+              <input type="number" class="sched-e-insurance" min="0" value="${p.insurance||0}" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Repairs & maintenance</label>
+              <input type="number" class="sched-e-repairs" min="0" value="${p.repairs||0}" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Depreciation</label>
+              <input type="number" class="sched-e-depreciation" min="0" value="${p.depreciation||0}" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+              <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Utilities</label>
+              <input type="number" class="sched-e-utilities" min="0" value="${p.utilities||0}" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+            </div>
+          </div>`;
+      });
+      html += `<button onclick="addRentalProperty()" style="width:100%;padding:8px;background:var(--surface);color:var(--accent-light);border:1px dashed var(--border);border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">+ Add another property</button>`;
+      html += '</div><div style="color:var(--text-dim);font-size:12px;line-height:1.5">Enter rental income and expenses for each property. Net income (or loss) flows to your total income. Passive activity loss rules may limit deductions.</div>';
+      return html;
+    }
+    case 'ptc': {
+      const ptc = STATE.taxData.premiumTaxCredit || {};
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">Health Insurance Marketplace (Form 1095-A):</label>
+          <div style="display:grid;gap:8px">
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Your monthly premium</label>
+              <input type="number" id="modal-ptc-premium" min="0" step="10" value="${ptc.monthlyPremium||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">SLCSP monthly premium (from 1095-A, Column B)</label>
+              <input type="number" id="modal-ptc-slcsp" min="0" step="10" value="${ptc.slcspPremium||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Advance PTC received (1095-A, Column C total)</label>
+              <input type="number" id="modal-ptc-advance" min="0" step="100" value="${ptc.advancePTC||0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+          </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>SLCSP:</strong> Second Lowest Cost Silver Plan — found on your 1095-A Column B.<br>
+          <strong>Advance PTC:</strong> Subsidies paid directly to your insurer — Column C total.<br>
+          If your actual PTC exceeds advance payments, you get additional refund. If less, you may owe back.
+        </div>
+      `;
+    }
     case 'other_deductions':
       return `
         <div style="margin-bottom:16px">
@@ -3704,6 +4125,40 @@ function applyAssumptionChange(id) {
       STATE.taxData.otherMiscIncome = parseFloat(document.getElementById('modal-other-misc')?.value) || 0;
       break;
     }
+    case 'schedule_e': {
+      const props = [];
+      const descs = document.querySelectorAll('.sched-e-desc');
+      const rents = document.querySelectorAll('.sched-e-rents');
+      const mortgages = document.querySelectorAll('.sched-e-mortgage');
+      const taxes = document.querySelectorAll('.sched-e-taxes');
+      const insurance = document.querySelectorAll('.sched-e-insurance');
+      const repairs = document.querySelectorAll('.sched-e-repairs');
+      const depreciation = document.querySelectorAll('.sched-e-depreciation');
+      const utilities = document.querySelectorAll('.sched-e-utilities');
+      for (let i = 0; i < descs.length; i++) {
+        props.push({
+          description: descs[i]?.value || '',
+          rents: parseFloat(rents[i]?.value) || 0,
+          mortgage: parseFloat(mortgages[i]?.value) || 0,
+          taxes: parseFloat(taxes[i]?.value) || 0,
+          insurance: parseFloat(insurance[i]?.value) || 0,
+          repairs: parseFloat(repairs[i]?.value) || 0,
+          depreciation: parseFloat(depreciation[i]?.value) || 0,
+          utilities: parseFloat(utilities[i]?.value) || 0,
+        });
+      }
+      STATE.taxData.scheduleE = props.filter(p => p.rents > 0 || p.mortgage > 0);
+      STATE.taxData.rentalIncome = 0;
+      break;
+    }
+    case 'ptc': {
+      STATE.taxData.premiumTaxCredit = {
+        monthlyPremium: parseFloat(document.getElementById('modal-ptc-premium')?.value) || 0,
+        slcspPremium: parseFloat(document.getElementById('modal-ptc-slcsp')?.value) || 0,
+        advancePTC: parseFloat(document.getElementById('modal-ptc-advance')?.value) || 0,
+      };
+      break;
+    }
     case 'other_deductions': {
       STATE.taxData.educatorExpenses = parseFloat(document.getElementById('modal-educator')?.value) || 0;
       STATE.taxData.alimonyPaid = parseFloat(document.getElementById('modal-alimony-paid')?.value) || 0;
@@ -3762,6 +4217,37 @@ function sumEstPayments() {
   const total = q1 + q2 + q3 + q4;
   const el = document.getElementById('modal-est-payments');
   if (el) el.value = total;
+}
+
+function addRentalProperty() {
+  const container = document.querySelector('.sched-e-desc')?.closest('div[style*="margin-bottom:16px"]');
+  if (!container) return;
+  const btn = container.querySelector('button[onclick="addRentalProperty()"]');
+  if (!btn) return;
+  const count = container.querySelectorAll('.sched-e-desc').length + 1;
+  const block = document.createElement('div');
+  block.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px';
+  block.innerHTML = `
+    <div style="color:var(--accent-light);font-size:12px;font-weight:600;margin-bottom:8px">Property ${count}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Property address/name</label>
+      <input type="text" class="sched-e-desc" value="" placeholder="123 Main St" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Gross rents received</label>
+      <input type="number" class="sched-e-rents" min="0" value="0" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Mortgage interest</label>
+      <input type="number" class="sched-e-mortgage" min="0" value="0" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Property taxes</label>
+      <input type="number" class="sched-e-taxes" min="0" value="0" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Insurance</label>
+      <input type="number" class="sched-e-insurance" min="0" value="0" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Repairs & maintenance</label>
+      <input type="number" class="sched-e-repairs" min="0" value="0" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Depreciation</label>
+      <input type="number" class="sched-e-depreciation" min="0" value="0" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+      <div><label style="display:block;color:var(--text-dim);font-size:11px;margin-bottom:2px">Utilities</label>
+      <input type="number" class="sched-e-utilities" min="0" value="0" style="width:100%;padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></div>
+    </div>`;
+  btn.parentNode.insertBefore(block, btn);
 }
 
 function showToast(message, type) {
@@ -3840,6 +4326,7 @@ function downloadSummary() {
   if (r.totalRetirement > 0) lines.push(`  Retirement (1099-R):   $${fmt(r.totalRetirement)}`);
   if (r.ssaBenefits > 0) { lines.push(`  SS benefits (SSA-1099): $${fmt(r.ssaBenefits)}`); lines.push(`  SS taxable amount:     $${fmt(r.ssaTaxable)}`); }
   if (r.schedCNet !== 0) lines.push(`  Business income (C):   $${fmt(r.schedCNet)}`);
+  if (r.schedENet !== 0) lines.push(`  Rental income (E):     $${fmt(r.schedENet)}`);
   if (r.netSTCG + r.netLTCG !== 0) lines.push(`  Capital gains/losses:  $${fmt(r.netSTCG + r.netLTCG)}`);
   if (r.otherIncome > 0) lines.push(`  Other income:          $${fmt(r.otherIncome)}`);
   lines.push(`  Total Income:          $${fmt(r.totalIncome)}`);
@@ -3855,11 +4342,13 @@ function downloadSummary() {
   lines.push(`  Income Tax:            $${fmt(r.incomeTax)}`);
   if (r.seTax > 0) lines.push(`  SE Tax:                $${fmt(r.seTax)}`);
   if (r.niit > 0) lines.push(`  NIIT:                  $${fmt(r.niit)}`);
+  if (r.amt > 0) lines.push(`  AMT:                   $${fmt(r.amt)}`);
   lines.push(`  Total Tax:             $${fmt(r.totalTax)}`);
   lines.push('');
   lines.push('── PAYMENTS & RESULT ───────────────────────────────────');
   lines.push(`  Federal Withheld:      $${fmt(r.totalFedWithheld)}`);
   if (r.estimatedPayments > 0) lines.push(`  Estimated Payments:    $${fmt(r.estimatedPayments)}`);
+  if (r.ptcReconciliation !== 0) lines.push(`  PTC Reconciliation:    $${fmt(r.ptcReconciliation)}`);
   lines.push(`  Total Payments:        $${fmt(r.totalPayments)}`);
   lines.push('');
   lines.push(`  ${r.refundOrOwed >= 0 ? 'ESTIMATED REFUND' : 'AMOUNT OWED'}:      $${fmt(Math.abs(r.refundOrOwed))}`);
