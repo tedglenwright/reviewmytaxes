@@ -437,8 +437,7 @@ const GITHUB_LICENSE = GITHUB_REPO + '/blob/main/LICENSE';
 const STRIPE_PUBLISHABLE_KEY = 'pk_test_REPLACE_WITH_YOUR_KEY';
 // TODO: Replace with your Stripe Payment Links (created in Stripe Dashboard)
 const STRIPE_PAYMENT_LINKS = {
-  single_question: '', // $5 payment link
-  three_questions: '', // $15 payment link (bundle discount)
+  three_questions: '', // $5 for 3 questions payment link
 };
 let stripeInstance = null;
 try {
@@ -1364,9 +1363,12 @@ function computeTaxReturn(data) {
   const totalPayments = totalFedWithheld + (data.estimatedPayments||0) + totalRefundableCredits;
   const refundOrOwed = totalPayments - totalTax;
 
-  // Default assumptions
-  if (!data.filingStatus) assumptions.unshift({ id:'filing_status', text:'Assumed Single filing status based on single W-2', impact:'high' });
-  else if (data.w2s && data.w2s.length >= 2) assumptions.unshift({ id:'filing_status', text:'Assumed Married Filing Jointly based on multiple W-2s — could be MFS', impact:'high' });
+  // Default assumptions — always let user change filing status
+  if (data.w2s && data.w2s.length >= 2) {
+    assumptions.unshift({ id:'filing_status', text:`Assumed ${FS_LABELS[fs]} based on multiple W-2s — you can change this`, impact:'high' });
+  } else {
+    assumptions.unshift({ id:'filing_status', text:`Assumed ${FS_LABELS[fs]} filing status — you can change this`, impact:'high' });
+  }
   if (!data.dependents) assumptions.push({ id:'dependents', text:'Assumed no dependents — child tax credit ($2,000/child) not applied', impact:'high' });
   if (!data.educationCredit && !data.eitc) assumptions.push({ id:'no_credits', text:'Did not apply education credits, child tax credit, or EITC', impact:'high' });
   if ((data.estimatedPayments||0) === 0 && schedCNet > 0) assumptions.push({ id:'estimated_payments', text:'No estimated tax payments entered — if you made quarterly payments (1040-ES), add them to increase your refund', impact:'high' });
@@ -1684,8 +1686,12 @@ function closeSourceDoc() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    closeSourceDoc();
-    closeAssumptionModal();
+    const changelog = document.getElementById('changelog-modal');
+    if (changelog) { changelog.remove(); return; }
+    const assumption = document.getElementById('assumption-modal');
+    if (assumption) { closeAssumptionModal(); return; }
+    const source = document.getElementById('source-modal');
+    if (source) { closeSourceDoc(); return; }
   }
 });
 
@@ -2000,8 +2006,8 @@ function renderReview() {
   if (!r) return;
 
   const answeredCount = STATE.answeredQs.size;
-  const pricedQs = Math.min(answeredCount, 3);
-  const totalCost = pricedQs * 5;
+  const totalCost = answeredCount > 0 ? 5 : 0; // $5 flat for up to 3 questions
+  const freeQsLeft = Math.max(0, 3 - answeredCount);
 
   app.innerHTML = `
     <div class="top-bar">
@@ -2011,7 +2017,7 @@ function renderReview() {
         <span style="color:var(--text-muted);font-size:13px">${FS_LABELS[r.filingStatus]} · Tax Year ${TAX.year}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        ${totalCost > 0 ? `<div class="cost-badge">${pricedQs} question${pricedQs>1?'s':''} · $${totalCost}</div>` : ''}
+        ${answeredCount > 0 ? `<div class="cost-badge">${answeredCount} refined · $5${answeredCount <= 3 ? ' ('+freeQsLeft+' left)' : ' + free'}</div>` : ''}
         <button onclick="shareSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Copy summary to clipboard">Share</button>
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Download</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
@@ -2421,7 +2427,8 @@ function renderReturn(r) {
 function renderAssumptions(r) {
   const unanswered = r.assumptions.filter(a => !STATE.answeredQs.has(a.id));
   const answeredList = r.assumptions.filter(a => STATE.answeredQs.has(a.id));
-  const paidCount = [...STATE.answeredQs].length;
+  const answeredCount = STATE.answeredQs.size;
+  const freeQsLeft = Math.max(0, 3 - answeredCount);
 
   let html = `
     <div style="margin-bottom:16px">
@@ -2429,8 +2436,15 @@ function renderAssumptions(r) {
       <p style="color:var(--text-muted);font-size:13px;margin-top:4px">
         Your draft return made these assumptions. Refine them to get a more accurate estimate.
       </p>
-      ${paidCount > 0 ? `<div style="margin-top:8px;padding:8px 12px;background:rgba(34,197,94,0.08);border:1px solid var(--green-dark);border-radius:6px;font-size:12px;color:var(--green)">
-        &#x2713; ${paidCount} assumption${paidCount>1?'s':''} refined · Return recalculated
+      <div style="margin-top:10px;padding:10px 14px;background:rgba(59,130,246,0.08);border:1px solid var(--accent);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="color:var(--accent-light);font-size:14px;font-weight:700">$5 for 3 questions</div>
+          <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${answeredCount >= 3 ? 'All additional questions are free' : answeredCount > 0 ? freeQsLeft + ' question' + (freeQsLeft !== 1 ? 's' : '') + ' remaining in your $5 bundle' : 'First 3 refinements for $5 total · Free after that'}</div>
+        </div>
+        <div style="color:var(--accent-light);font-size:20px;font-weight:800">$5</div>
+      </div>
+      ${answeredCount > 0 ? `<div style="margin-top:8px;padding:8px 12px;background:rgba(34,197,94,0.08);border:1px solid var(--green-dark);border-radius:6px;font-size:12px;color:var(--green)">
+        &#x2713; ${answeredCount} assumption${answeredCount>1?'s':''} refined · Return recalculated
       </div>` : ''}
     </div>
     <div class="refine-progress">
@@ -2446,8 +2460,7 @@ function renderAssumptions(r) {
     html += `<div style="color:var(--text-dim);font-size:12px;margin-bottom:8px;font-weight:600">Needs your input (${unanswered.length})</div>`;
     unanswered.forEach((a, i) => {
       const canInteract = getAssumptionForm(a.id) !== null;
-      const globalIdx = r.assumptions.indexOf(a);
-      const price = globalIdx < 3 ? 5 : 0;
+      const isFree = answeredCount >= 3 || !canInteract;
       html += `
         <div class="assumption-card">
           <div style="flex:1">
@@ -2457,8 +2470,8 @@ function renderAssumptions(r) {
             </div>
             <div class="assumption-text">${a.text}</div>
           </div>
-          <button class="btn-answer" onclick="answerQuestion('${a.id}')">
-            ${canInteract ? (stripeInstance || price === 0 ? 'Refine' : 'Refine (free in beta)') : 'Acknowledge'}
+          <button class="btn-answer" onclick="answerQuestion('${a.id}')" style="${canInteract ? 'padding:8px 16px;font-size:13px' : ''}">
+            ${canInteract ? (isFree ? 'Refine (free)' : 'Refine') : 'OK'}
           </button>
         </div>
       `;
@@ -2505,11 +2518,11 @@ function renderPricing() {
         </div>
         <div>
           <div style="font-size:28px;font-weight:800;color:var(--accent-light)">$5</div>
-          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Per question to refine (max 3)</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">For 3 questions to refine</div>
         </div>
         <div>
-          <div style="font-size:28px;font-weight:800;color:var(--text)">$15</div>
-          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Maximum total cost</div>
+          <div style="font-size:28px;font-weight:800;color:var(--green)">Free</div>
+          <div style="color:var(--text-muted);font-size:12px;margin-top:4px">Every question after 3</div>
         </div>
       </div>
     </div>
@@ -2530,8 +2543,8 @@ function renderPricing() {
       </div>
       <div class="pricing-card featured">
         <div style="color:var(--accent-light);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 2</div>
-        <div class="price" style="color:var(--accent-light)">$5<span style="font-size:14px;color:var(--text-dim)">/ea</span></div>
-        <div class="plan">Refine Your Return</div>
+        <div class="price" style="color:var(--accent-light)">$5</div>
+        <div class="plan">3 Questions to Refine</div>
         <div class="features" style="text-align:left;padding:0 8px">
           &#x2713; Change filing status<br>
           &#x2713; Add dependents & credits<br>
@@ -2545,9 +2558,9 @@ function renderPricing() {
       <div class="pricing-card green">
         <div style="color:var(--green);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Step 3</div>
         <div class="price" style="color:var(--green)">Free</div>
-        <div class="plan">Keep Refining</div>
+        <div class="plan">Unlimited After That</div>
         <div class="features" style="text-align:left;padding:0 8px">
-          &#x2713; 4th question onward is free<br>
+          &#x2713; All questions after 3 are free<br>
           &#x2713; Unlimited recalculations<br>
           &#x2713; Compare scenarios<br>
           &#x2713; No subscription<br>
@@ -2573,7 +2586,7 @@ function renderPricing() {
           <tbody>
             <tr style="border-bottom:1px solid var(--surface-light)">
               <td style="padding:8px;color:var(--text-muted)">Price</td>
-              <td style="text-align:center;padding:8px;color:var(--green);font-weight:600">$0–$15</td>
+              <td style="text-align:center;padding:8px;color:var(--green);font-weight:600">$0–$5</td>
               <td style="text-align:center;padding:8px;color:var(--text-muted)">$0–$129+</td>
               <td style="text-align:center;padding:8px;color:var(--text-muted)">$200–$500+</td>
             </tr>
@@ -2613,7 +2626,7 @@ function renderPricing() {
     <div style="margin-top:20px;background:rgba(34,197,94,0.08);border:1px solid var(--green-dark);border-radius:8px;padding:16px;text-align:center">
       <div style="font-size:14px;font-weight:600;color:var(--green)">You've refined ${answered} assumption${answered > 1 ? 's' : ''}</div>
       <div style="color:var(--text-muted);font-size:12px;margin-top:4px">
-        ${answered <= 3 ? `Cost: $${Math.min(answered, 3) * 5} (${3 - answered} paid question${3 - answered !== 1 ? 's' : ''} remaining)` : `Cost: $15 (all additional questions are free)`}
+        ${answered <= 3 ? `Cost: $5 (${3 - answered} question${3 - answered !== 1 ? 's' : ''} remaining in bundle)` : `Cost: $5 (all additional questions are free)`}
       </div>
     </div>
     ` : ''}
