@@ -492,6 +492,183 @@ const TAX = {
 const FS_LABELS = { single:"Single", mfj:"Married Filing Jointly", mfs:"Married Filing Separately", hoh:"Head of Household" };
 
 // ═══════════════════════════════════════════════════════════════
+// 2025 STATE INCOME TAX DATA (all 50 states + DC)
+// ═══════════════════════════════════════════════════════════════
+// Format: { name, type: 'none'|'flat'|'progressive', rate (flat), brackets: { single, mfj } (progressive)
+//   stdDed: { single, mfj }, personalExemption: { single, mfj } }
+// Brackets: [[upperLimit, rate], ...] — same format as federal
+// Most states use federal AGI as starting point
+const STATE_TAX = {
+  '': { name: '— Select your state —', type: 'none' },
+  AL: { name:'Alabama', type:'progressive',
+    brackets:{ single:[[500,.02],[3000,.04],[Infinity,.05]], mfj:[[1000,.02],[6000,.04],[Infinity,.05]] },
+    stdDed:{ single:2500, mfj:7500, mfs:2500, hoh:4700 }, exemption:{ single:1500, mfj:3000, mfs:1500, hoh:1500 } },
+  AK: { name:'Alaska', type:'none' },
+  AZ: { name:'Arizona', type:'flat', rate:.025, stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  AR: { name:'Arkansas', type:'progressive',
+    brackets:{ single:[[5100,.02],[10300,.04],[Infinity,.044]], mfj:[[5100,.02],[10300,.04],[Infinity,.044]] },
+    stdDed:{ single:2340, mfj:4680, mfs:2340, hoh:2340 } },
+  CA: { name:'California', type:'progressive',
+    brackets:{ single:[[10756,.01],[25499,.02],[40242,.04],[55866,.06],[70606,.08],[360659,.093],[432787,.103],[721314,.113],[Infinity,.123]],
+      mfj:[[21512,.01],[50998,.02],[80484,.04],[111732,.06],[141212,.08],[721318,.093],[865574,.103],[1442628,.113],[Infinity,.123]] },
+    stdDed:{ single:5540, mfj:11080, mfs:5540, hoh:11080 }, exemption:{ single:144, mfj:288, mfs:144, hoh:144 } },
+  CO: { name:'Colorado', type:'flat', rate:.044, stdDed:{ single:15750, mfj:31500, mfs:15750, hoh:23625 } },
+  CT: { name:'Connecticut', type:'progressive',
+    brackets:{ single:[[10000,.02],[50000,.045],[100000,.055],[200000,.06],[250000,.065],[500000,.069],[Infinity,.0699]],
+      mfj:[[20000,.02],[100000,.045],[200000,.055],[400000,.06],[500000,.065],[1000000,.069],[Infinity,.0699]] },
+    stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:15000, mfj:24000, mfs:15000, hoh:19000 } },
+  DE: { name:'Delaware', type:'progressive',
+    brackets:{ single:[[2000,0],[5000,.022],[10000,.039],[20000,.048],[25000,.052],[60000,.055],[Infinity,.066]],
+      mfj:[[2000,0],[5000,.022],[10000,.039],[20000,.048],[25000,.052],[60000,.055],[Infinity,.066]] },
+    stdDed:{ single:3250, mfj:6500, mfs:3250, hoh:3250 }, exemption:{ single:110, mfj:220, mfs:110, hoh:110 } },
+  FL: { name:'Florida', type:'none' },
+  GA: { name:'Georgia', type:'flat', rate:.0549, stdDed:{ single:12000, mfj:24000, mfs:12000, hoh:18000 } },
+  HI: { name:'Hawaii', type:'progressive',
+    brackets:{ single:[[2400,.014],[4800,.032],[9600,.055],[14400,.064],[19200,.068],[24000,.072],[36000,.076],[48000,.079],[150000,.0825],[175000,.09],[200000,.10],[Infinity,.11]],
+      mfj:[[4800,.014],[9600,.032],[19200,.055],[28800,.064],[38400,.068],[48000,.072],[72000,.076],[96000,.079],[300000,.0825],[350000,.09],[400000,.10],[Infinity,.11]] },
+    stdDed:{ single:2200, mfj:4400, mfs:2200, hoh:3212 } },
+  ID: { name:'Idaho', type:'flat', rate:.058, stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  IL: { name:'Illinois', type:'flat', rate:.0495, stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:2625, mfj:5250, mfs:2625, hoh:2625 } },
+  IN: { name:'Indiana', type:'flat', rate:.0305, stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:1000, mfj:2000, mfs:1000, hoh:1000 } },
+  IA: { name:'Iowa', type:'flat', rate:.038, stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  KS: { name:'Kansas', type:'progressive',
+    brackets:{ single:[[15000,.031],[30000,.0525],[Infinity,.057]], mfj:[[30000,.031],[60000,.0525],[Infinity,.057]] },
+    stdDed:{ single:3500, mfj:8000, mfs:3500, hoh:6000 } },
+  KY: { name:'Kentucky', type:'flat', rate:.04, stdDed:{ single:3160, mfj:6320, mfs:3160, hoh:3160 } },
+  LA: { name:'Louisiana', type:'progressive',
+    brackets:{ single:[[12500,.0185],[50000,.035],[Infinity,.0425]], mfj:[[25000,.0185],[100000,.035],[Infinity,.0425]] },
+    stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:4500, mfj:9000, mfs:4500, hoh:4500 } },
+  ME: { name:'Maine', type:'progressive',
+    brackets:{ single:[[26050,.058],[61600,.0675],[Infinity,.0715]], mfj:[[52100,.058],[123200,.0675],[Infinity,.0715]] },
+    stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  MD: { name:'Maryland', type:'progressive',
+    brackets:{ single:[[1000,.02],[2000,.03],[3000,.04],[100000,.0475],[125000,.05],[150000,.0525],[250000,.055],[Infinity,.0575]],
+      mfj:[[1000,.02],[2000,.03],[3000,.04],[150000,.0475],[175000,.05],[225000,.0525],[300000,.055],[Infinity,.0575]] },
+    stdDed:{ single:2550, mfj:5150, mfs:2550, hoh:2550 }, exemption:{ single:3200, mfj:6400, mfs:3200, hoh:3200 } },
+  MA: { name:'Massachusetts', type:'flat', rate:.05, stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:4400, mfj:8800, mfs:4400, hoh:4400 },
+    note:'9% surtax on income over $1M' },
+  MI: { name:'Michigan', type:'flat', rate:.0425, stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:5600, mfj:11200, mfs:5600, hoh:5600 } },
+  MN: { name:'Minnesota', type:'progressive',
+    brackets:{ single:[[31690,.0535],[104090,.068],[183340,.0785],[Infinity,.0985]],
+      mfj:[[46330,.0535],[184040,.068],[321450,.0785],[Infinity,.0985]] },
+    stdDed:{ single:14575, mfj:29150, mfs:14575, hoh:21400 } },
+  MS: { name:'Mississippi', type:'flat', rate:.047, stdDed:{ single:2300, mfj:4600, mfs:2300, hoh:3400 }, exemption:{ single:6000, mfj:12000, mfs:6000, hoh:8000 } },
+  MO: { name:'Missouri', type:'progressive',
+    brackets:{ single:[[1207,.02],[2414,.025],[3621,.03],[4828,.035],[6035,.04],[7242,.045],[8449,.05],[Infinity,.048]],
+      mfj:[[1207,.02],[2414,.025],[3621,.03],[4828,.035],[6035,.04],[7242,.045],[8449,.05],[Infinity,.048]] },
+    stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  MT: { name:'Montana', type:'progressive',
+    brackets:{ single:[[20500,.047],[Infinity,.059]], mfj:[[20500,.047],[Infinity,.059]] },
+    stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  NE: { name:'Nebraska', type:'progressive',
+    brackets:{ single:[[3700,.0246],[22170,.0351],[35730,.0501],[Infinity,.0584]],
+      mfj:[[7390,.0246],[44350,.0351],[71500,.0501],[Infinity,.0584]] },
+    stdDed:{ single:8250, mfj:16500, mfs:8250, hoh:12150 } },
+  NV: { name:'Nevada', type:'none' },
+  NH: { name:'New Hampshire', type:'none' },
+  NJ: { name:'New Jersey', type:'progressive',
+    brackets:{ single:[[20000,.014],[35000,.0175],[40000,.035],[75000,.05525],[500000,.0637],[1000000,.0897],[Infinity,.1075]],
+      mfj:[[20000,.014],[50000,.0175],[70000,.0245],[80000,.035],[150000,.05525],[500000,.0637],[1000000,.0897],[Infinity,.1075]] },
+    stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:1000, mfj:2000, mfs:1000, hoh:1000 } },
+  NM: { name:'New Mexico', type:'progressive',
+    brackets:{ single:[[5500,.017],[11000,.032],[16000,.047],[210000,.049],[315000,.052],[Infinity,.059]],
+      mfj:[[8000,.017],[16000,.032],[24000,.047],[315000,.049],[420000,.052],[Infinity,.059]] },
+    stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  NY: { name:'New York', type:'progressive',
+    brackets:{ single:[[8500,.04],[11700,.045],[13900,.0525],[80650,.055],[215400,.06],[1077550,.0685],[5000000,.0965],[25000000,.103],[Infinity,.109]],
+      mfj:[[17150,.04],[23600,.045],[27900,.0525],[161550,.055],[323200,.06],[2155350,.0685],[5000000,.0965],[25000000,.103],[Infinity,.109]] },
+    stdDed:{ single:8000, mfj:16050, mfs:8000, hoh:11200 } },
+  NC: { name:'North Carolina', type:'flat', rate:.045, stdDed:{ single:12750, mfj:25500, mfs:12750, hoh:19125 } },
+  ND: { name:'North Dakota', type:'flat', rate:.0195, stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 },
+    note:'Most residents owe $0 — ND eliminated tax for income under $44,725 single / $74,750 MFJ' },
+  OH: { name:'Ohio', type:'progressive',
+    brackets:{ single:[[26050,0],[46100,.02765],[100000,.03226],[Infinity,.0357]],
+      mfj:[[26050,0],[46100,.02765],[100000,.03226],[Infinity,.0357]] },
+    stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:2400, mfj:4800, mfs:2400, hoh:2400 } },
+  OK: { name:'Oklahoma', type:'progressive',
+    brackets:{ single:[[1000,.0025],[2500,.0075],[3750,.0175],[4900,.0275],[7200,.0375],[Infinity,.0475]],
+      mfj:[[2000,.0025],[5000,.0075],[7500,.0175],[9800,.0275],[12200,.0375],[Infinity,.0475]] },
+    stdDed:{ single:6350, mfj:12700, mfs:6350, hoh:9350 } },
+  OR: { name:'Oregon', type:'progressive',
+    brackets:{ single:[[4300,.0475],[10750,.0675],[125000,.0875],[Infinity,.099]],
+      mfj:[[8600,.0475],[21500,.0675],[250000,.0875],[Infinity,.099]] },
+    stdDed:{ single:2745, mfj:5495, mfs:2745, hoh:4430 } },
+  PA: { name:'Pennsylvania', type:'flat', rate:.0307, stdDed:{ single:0, mfj:0, mfs:0, hoh:0 } },
+  RI: { name:'Rhode Island', type:'progressive',
+    brackets:{ single:[[73450,.0375],[166950,.0475],[Infinity,.0599]],
+      mfj:[[73450,.0375],[166950,.0475],[Infinity,.0599]] },
+    stdDed:{ single:10550, mfj:21150, mfs:10550, hoh:15800 } },
+  SC: { name:'South Carolina', type:'progressive',
+    brackets:{ single:[[3460,.03],[17330,.05],[Infinity,.064]],
+      mfj:[[3460,.03],[17330,.05],[Infinity,.064]] },
+    stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  SD: { name:'South Dakota', type:'none' },
+  TN: { name:'Tennessee', type:'none' },
+  TX: { name:'Texas', type:'none' },
+  UT: { name:'Utah', type:'flat', rate:.0465, stdDed:{ single:0, mfj:0, mfs:0, hoh:0 },
+    note:'Utah offers a taxpayer credit that effectively creates a standard deduction' },
+  VT: { name:'Vermont', type:'progressive',
+    brackets:{ single:[[45400,.0335],[110450,.066],[229550,.076],[Infinity,.0875]],
+      mfj:[[76050,.0335],[184200,.066],[229550,.076],[Infinity,.0875]] },
+    stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+  VA: { name:'Virginia', type:'progressive',
+    brackets:{ single:[[3000,.02],[5000,.03],[17000,.05],[Infinity,.0575]],
+      mfj:[[3000,.02],[5000,.03],[17000,.05],[Infinity,.0575]] },
+    stdDed:{ single:4700, mfj:9400, mfs:4700, hoh:4700 }, exemption:{ single:930, mfj:1860, mfs:930, hoh:930 } },
+  WA: { name:'Washington', type:'none', note:'7% tax on long-term capital gains over $270,000' },
+  WV: { name:'West Virginia', type:'progressive',
+    brackets:{ single:[[10000,.0236],[25000,.0315],[40000,.0354],[60000,.0472],[Infinity,.0512]],
+      mfj:[[10000,.0236],[25000,.0315],[40000,.0354],[60000,.0472],[Infinity,.0512]] },
+    stdDed:{ single:0, mfj:0, mfs:0, hoh:0 }, exemption:{ single:2000, mfj:4000, mfs:2000, hoh:2000 } },
+  WI: { name:'Wisconsin', type:'progressive',
+    brackets:{ single:[[14320,.0354],[28640,.0465],[315310,.0530],[Infinity,.0765]],
+      mfj:[[19110,.0354],[38220,.0465],[420420,.0530],[Infinity,.0765]] },
+    stdDed:{ single:13230, mfj:24470, mfs:12280, hoh:16680 } },
+  WY: { name:'Wyoming', type:'none' },
+  DC: { name:'District of Columbia', type:'progressive',
+    brackets:{ single:[[10000,.04],[40000,.06],[60000,.065],[250000,.085],[500000,.0925],[1000000,.0975],[Infinity,.1075]],
+      mfj:[[10000,.04],[40000,.06],[60000,.065],[250000,.085],[500000,.0925],[1000000,.0975],[Infinity,.1075]] },
+    stdDed:{ single:14600, mfj:29200, mfs:14600, hoh:21900 } },
+};
+
+function computeStateTax(stateCode, federalResult, taxData) {
+  const st = STATE_TAX[stateCode];
+  if (!st || st.type === 'none') {
+    return { stateCode, stateName: st?.name || 'Unknown', tax: 0, type: 'none', effectiveRate: 0,
+      taxableIncome: 0, deduction: 0, exemption: 0, withheld: federalResult.totalStateWithheld || 0,
+      refundOrOwed: federalResult.totalStateWithheld || 0, note: st?.note || '' };
+  }
+
+  const fs = federalResult.filingStatus;
+  const fsKey = (fs === 'hoh') ? 'single' : fs; // Most states treat HOH same as single for brackets
+
+  // Start from federal AGI
+  let stateAGI = federalResult.agi;
+
+  // State standard deduction
+  const stdDed = (st.stdDed && st.stdDed[fs]) || (st.stdDed && st.stdDed.single) || 0;
+  const exemption = (st.exemption && st.exemption[fs]) || (st.exemption && st.exemption.single) || 0;
+  const deduction = stdDed + exemption;
+  const taxableIncome = Math.max(0, stateAGI - deduction);
+
+  let tax = 0;
+  if (st.type === 'flat') {
+    tax = Math.round(taxableIncome * st.rate);
+  } else if (st.type === 'progressive') {
+    const brackets = (st.brackets[fsKey]) || st.brackets.single;
+    tax = Math.round(calcBracketTax(taxableIncome, brackets));
+  }
+
+  const withheld = federalResult.totalStateWithheld || 0;
+  const effectiveRate = stateAGI > 0 ? (tax / stateAGI * 100) : 0;
+  const refundOrOwed = withheld - tax;
+
+  return { stateCode, stateName: st.name, tax, type: st.type, rate: st.rate,
+    taxableIncome, stateAGI, deduction, stdDed, exemption, effectiveRate,
+    withheld, refundOrOwed, note: st.note || '' };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // OCR DOCUMENT PARSER
 // ═══════════════════════════════════════════════════════════════
 class TaxDocumentParser {
@@ -1287,18 +1464,29 @@ function computeTaxReturn(data) {
     assumptions.push({ id:'1099r_taxable', text:'Assumed entire 1099-R distribution is taxable (Box 2a)', impact:'high' });
   }
 
+  // Other income (Schedule 1 Part I)
+  const priorRefund = data.priorRefund || 0;
+  const gamblingIncome = data.gamblingIncome || 0;
+  const alimonyReceived = data.alimonyReceived || 0;
+  const rentalIncome = data.rentalIncome || 0;
+  const otherMiscIncome = data.otherMiscIncome || 0;
+  const otherIncome = priorRefund + gamblingIncome + alimonyReceived + rentalIncome + otherMiscIncome;
+
   // Total Income
   const capGainIncome = Math.max(netSTCG + netLTCG, -TAX.capitalLossLimit);
-  const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome + totalRetirement;
+  const totalIncome = totalWages + totalInterest + totalOrdDiv + schedCNet + capGainIncome + totalRetirement + otherIncome;
 
   // Additional adjustments from user input
   const hsaDed = Math.min(data.hsaContribution || 0, fs === 'mfj' ? 8550 : 4300);
   const iraDed = Math.min(data.iraContribution || 0, 7000);
   const studentLoanDed = Math.min(data.studentLoanInterest || 0, 2500);
+  const educatorDed = Math.min(data.educatorExpenses || 0, 300);
+  const alimonyPaid = data.alimonyPaid || 0;
+  const movingExpenses = data.movingExpenses || 0;
 
   // Adjustments
-  const adjustments = seDeduction + hsaDed + iraDed + studentLoanDed;
-  schedules['1'] = { seDeduction, hsaDed, iraDed, studentLoanDed, totalAdjustments: adjustments };
+  const adjustments = seDeduction + hsaDed + iraDed + studentLoanDed + educatorDed + alimonyPaid + movingExpenses;
+  schedules['1'] = { seDeduction, hsaDed, iraDed, studentLoanDed, educatorDed, alimonyPaid, movingExpenses, otherIncome, priorRefund, gamblingIncome, alimonyReceived, rentalIncome, otherMiscIncome, totalAdjustments: adjustments };
 
   // AGI
   const agi = totalIncome - adjustments;
@@ -1364,12 +1552,15 @@ function computeTaxReturn(data) {
   const otherDepCredit = numOtherDeps * 500;
   const educationCredit = data.educationCredit || 0;
   const eitcCredit = data.eitc || 0;
-  const totalNonrefundableCredits = Math.min(incomeTax, childTaxCredit + otherDepCredit + educationCredit);
+  const childCareCredit = data.childCareCredit || 0;
+  const saversCredit = data.saversCredit || 0;
+  const energyCredit = data.energyCredit || 0;
+  const totalNonrefundableCredits = Math.min(incomeTax, childTaxCredit + otherDepCredit + educationCredit + childCareCredit + saversCredit + energyCredit);
   const totalRefundableCredits = eitcCredit;
   const totalCredits = totalNonrefundableCredits + totalRefundableCredits;
 
   schedules['2'] = { seTax, niit, totalAdditionalTax: seTax + niit };
-  schedules['3'] = { childTaxCredit, otherDepCredit, educationCredit, eitcCredit, totalNonrefundableCredits, totalRefundableCredits, totalCredits };
+  schedules['3'] = { childTaxCredit, otherDepCredit, educationCredit, eitcCredit, childCareCredit, saversCredit, energyCredit, totalNonrefundableCredits, totalRefundableCredits, totalCredits };
 
   const totalTax = Math.max(0, incomeTax - totalNonrefundableCredits) + seTax + niit;
   const totalPayments = totalFedWithheld + (data.estimatedPayments||0) + totalRefundableCredits;
@@ -1383,9 +1574,22 @@ function computeTaxReturn(data) {
   }
   if (!data.dependents) assumptions.push({ id:'dependents', text:'Assumed no dependents — child tax credit ($2,000/child) not applied', impact:'high' });
   if (!data.educationCredit && !data.eitc) assumptions.push({ id:'no_credits', text:'Did not apply education credits, child tax credit, or EITC', impact:'high' });
+  if (!data.childCareCredit && !data.saversCredit && !data.energyCredit) assumptions.push({ id:'other_credits', text:'Did not apply child care credit, retirement saver\'s credit, or energy credits', impact:'medium' });
   if ((data.estimatedPayments||0) === 0 && schedCNet > 0) assumptions.push({ id:'estimated_payments', text:'No estimated tax payments entered — if you made quarterly payments (1040-ES), add them to increase your refund', impact:'high' });
   if (!data.hsaContribution && !data.iraContribution && !data.studentLoanInterest) assumptions.push({ id:'no_hsa', text:'Did not account for HSA, IRA contributions, or student loan interest', impact:'medium' });
-  assumptions.push({ id:'no_state', text:'State return not calculated — federal only', impact:'low' });
+  if (!data.educatorExpenses && !data.alimonyPaid && !data.movingExpenses) assumptions.push({ id:'other_deductions', text:'Did not include educator expenses, alimony paid, or moving expenses', impact:'low' });
+  if (!data.gamblingIncome && !data.alimonyReceived && !data.rentalIncome && !data.otherMiscIncome) assumptions.push({ id:'other_income', text:'Did not include other income: gambling, alimony, rental, jury duty, etc.', impact:'medium' });
+  if (!data.priorRefund) assumptions.push({ id:'prior_refund', text:'Did not include prior-year state/local tax refund (taxable if you itemized last year)', impact:'medium' });
+
+  // State tax
+  let stateResult = null;
+  if (data.stateCode && STATE_TAX[data.stateCode]) {
+    const federalResult = { agi, filingStatus: fs, totalStateWithheld };
+    stateResult = computeStateTax(data.stateCode, federalResult, data);
+  } else {
+    assumptions.push({ id:'select_state', text:'No state selected — select your state for a state tax estimate', impact:'medium' });
+  }
+
   assumptions.push({ id:'no_amt', text:'Did not calculate Alternative Minimum Tax (AMT)', impact:'medium' });
 
   return {
@@ -1398,11 +1602,12 @@ function computeTaxReturn(data) {
     totalWages, totalInterest, totalOrdDiv, totalQualDiv, totalRetirement,
     retirementDist: data.retirementDist || [],
     schedCNet, netSTCG, netLTCG, capitalLossCarryover,
-    totalIncome, adjustments, agi, deduction, usingItemized,
+    totalIncome, otherIncome, adjustments, agi, deduction, usingItemized,
     qbiDeduction, taxableIncome, ordinaryTax, ltcgTax, incomeTax,
     seTax, niit, totalTax, totalFedWithheld, totalStateWithheld,
     estimatedPayments: data.estimatedPayments||0,
     totalPayments, refundOrOwed, assumptions, schedules,
+    stateResult,
     effectiveRate: totalIncome > 0 ? (totalTax / totalIncome * 100) : 0,
     marginalRate: (TAX.brackets[fs].find(([l]) => taxableIncome <= l)?.[1] * 100) || 37,
   };
@@ -2156,6 +2361,12 @@ function renderReturn(r) {
         })() : ''}
         ${r.schedCNet !== 0 ? lineItem('8. Business income (Schedule C)', r.schedCNet, {onClick: r._necSources.length > 0 ? 'showNECSource()' : ''}) : ''}
         ${(r.netSTCG + r.netLTCG) !== 0 ? lineItem('7. Capital gain/loss (Schedule D)', r.netSTCG + r.netLTCG, {showSign:true, onClick: r.schedules.form8949 && r.schedules.form8949.some(t=>t._sourceURL) ? 'showCapGainSource(0)' : ''}) : ''}
+        ${r.otherIncome > 0 ? lineItem('8. Other income (Schedule 1)', r.otherIncome) : ''}
+        ${r.schedules['1'].priorRefund > 0 ? lineItem('   Prior-year refund', r.schedules['1'].priorRefund, {sub:true}) : ''}
+        ${r.schedules['1'].gamblingIncome > 0 ? lineItem('   Gambling winnings', r.schedules['1'].gamblingIncome, {sub:true}) : ''}
+        ${r.schedules['1'].alimonyReceived > 0 ? lineItem('   Alimony received', r.schedules['1'].alimonyReceived, {sub:true}) : ''}
+        ${r.schedules['1'].rentalIncome > 0 ? lineItem('   Rental income', r.schedules['1'].rentalIncome, {sub:true}) : ''}
+        ${r.schedules['1'].otherMiscIncome > 0 ? lineItem('   Other misc income', r.schedules['1'].otherMiscIncome, {sub:true}) : ''}
         ${lineItem('9. Total income', r.totalIncome, {bold:true})}
 
         ${sectionHeader('Adjustments to Income', 'Line 10')}
@@ -2163,6 +2374,9 @@ function renderReturn(r) {
         ${r.schedules['1'].hsaDed > 0 ? lineItem('HSA deduction', r.schedules['1'].hsaDed, {indent:true, sub:true}) : ''}
         ${r.schedules['1'].iraDed > 0 ? lineItem('IRA deduction', r.schedules['1'].iraDed, {indent:true, sub:true}) : ''}
         ${r.schedules['1'].studentLoanDed > 0 ? lineItem('Student loan interest', r.schedules['1'].studentLoanDed, {indent:true, sub:true}) : ''}
+        ${r.schedules['1'].educatorDed > 0 ? lineItem('Educator expenses', r.schedules['1'].educatorDed, {indent:true, sub:true}) : ''}
+        ${r.schedules['1'].alimonyPaid > 0 ? lineItem('Alimony paid', r.schedules['1'].alimonyPaid, {indent:true, sub:true}) : ''}
+        ${r.schedules['1'].movingExpenses > 0 ? lineItem('Moving expenses', r.schedules['1'].movingExpenses, {indent:true, sub:true}) : ''}
         ${r.adjustments === 0 ? lineItem('No adjustments', 0, {sub:true}) : ''}
         ${lineItem('10. Adjustments', r.adjustments, {bold:true})}
 
@@ -2183,6 +2397,9 @@ function renderReturn(r) {
           if (r.schedules['3'].childTaxCredit > 0) credHtml += lineItem('Child tax credit', -r.schedules['3'].childTaxCredit, {indent:true, sub:true});
           if (r.schedules['3'].otherDepCredit > 0) credHtml += lineItem('Other dependent credit', -r.schedules['3'].otherDepCredit, {indent:true, sub:true});
           if (r.schedules['3'].educationCredit > 0) credHtml += lineItem('Education credit', -r.schedules['3'].educationCredit, {indent:true, sub:true});
+          if (r.schedules['3'].childCareCredit > 0) credHtml += lineItem('Child/dependent care credit', -r.schedules['3'].childCareCredit, {indent:true, sub:true});
+          if (r.schedules['3'].saversCredit > 0) credHtml += lineItem('Saver\'s credit', -r.schedules['3'].saversCredit, {indent:true, sub:true});
+          if (r.schedules['3'].energyCredit > 0) credHtml += lineItem('Residential energy credit', -r.schedules['3'].energyCredit, {indent:true, sub:true});
           credHtml += lineItem('21. Credits', r.schedules['3'].totalNonrefundableCredits, {sub:true});
           return credHtml;
         })() : ''}
@@ -2210,9 +2427,32 @@ function renderReturn(r) {
           <div class="amount" style="color:${r.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'}">$${fmt(Math.abs(r.refundOrOwed))}</div>
           <div class="rates">Marginal rate: ${r.marginalRate}% · Effective rate: ${r.effectiveRate.toFixed(1)}%</div>
         </div>
-        ${r.totalStateWithheld > 0 ? `
+        ${r.stateResult && r.stateResult.type !== 'none' && r.stateResult.tax > 0 ? `
+        ${sectionHeader(r.stateResult.stateName + ' State Tax', r.stateResult.type === 'flat' ? 'Flat rate' : 'Progressive brackets')}
+        ${lineItem('State AGI (from federal)', r.stateResult.stateAGI)}
+        ${r.stateResult.stdDed > 0 ? lineItem('State standard deduction', r.stateResult.stdDed, {sub:true}) : ''}
+        ${r.stateResult.exemption > 0 ? lineItem('State personal exemption', r.stateResult.exemption, {sub:true}) : ''}
+        ${lineItem('Total state deduction', r.stateResult.deduction)}
+        ${lineItem('State taxable income', r.stateResult.taxableIncome)}
+        ${lineItem('State income tax', r.stateResult.tax, {bold:true})}
+        ${r.stateResult.withheld > 0 ? lineItem('State tax withheld', r.stateResult.withheld) : ''}
+        <div class="refund-box ${r.stateResult.refundOrOwed >= 0 ? 'refund' : 'owed'}" style="margin-top:8px">
+          <div class="lbl">${r.stateResult.refundOrOwed >= 0 ? 'State Refund' : 'State Amount Owed'}</div>
+          <div class="amount" style="color:${r.stateResult.refundOrOwed >= 0 ? 'var(--green)' : 'var(--red)'}">$${fmt(Math.abs(r.stateResult.refundOrOwed))}</div>
+          <div class="rates">State effective rate: ${r.stateResult.effectiveRate.toFixed(1)}%${r.stateResult.note ? ' · ' + r.stateResult.note : ''}</div>
+        </div>
+        ` : r.stateResult && r.stateResult.type === 'none' ? `
+        <div style="margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.08);border:1px solid var(--green-dark);border-radius:8px;font-size:13px;color:var(--green);display:flex;justify-content:space-between;align-items:center">
+          <span>${r.stateResult.stateName} has no state income tax</span>
+          <span style="font-weight:700">$0 state tax</span>
+        </div>
+        ${r.totalStateWithheld > 0 ? `<div style="margin-top:8px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center">
+          <span>State withholding (should be refunded — no state tax)</span>
+          <span style="color:var(--green);font-weight:600">$${fmt(r.totalStateWithheld)}</span>
+        </div>` : ''}
+        ` : r.totalStateWithheld > 0 ? `
         <div style="margin-top:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center">
-          <span>State income tax withheld (not calculated — federal only)</span>
+          <span>State income tax withheld — select your state for a state estimate</span>
           <span style="color:var(--text);font-weight:600">$${fmt(r.totalStateWithheld)}</span>
         </div>
         ` : ''}
@@ -3080,6 +3320,108 @@ function getAssumptionForm(id) {
           Enter total estimated payments or break down by quarter. These payments reduce what you owe (or increase your refund).
         </div>
       `;
+    case 'select_state':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Select your state of residence:</label>
+          <select id="modal-state" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+            <option value="" ${!STATE.taxData.stateCode ? 'selected' : ''}>— Select your state —</option>
+            ${Object.entries(STATE_TAX).filter(([k,v]) => k && v.type !== 'none').map(([k,v]) => `<option value="${k}" ${STATE.taxData.stateCode === k ? 'selected' : ''}>${v.name}${v.type === 'flat' ? ' (flat ' + (v.rate*100).toFixed(1) + '%)' : ''}</option>`).join('')}
+            <option disabled>──── No income tax ────</option>
+            ${Object.entries(STATE_TAX).filter(([k,v]) => k && v.type === 'none').map(([k,v]) => `<option value="${k}" ${STATE.taxData.stateCode === k ? 'selected' : ''}>${v.name} (no income tax)</option>`).join('')}
+          </select>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          State tax is estimated using your federal AGI, the state standard deduction, and state tax brackets or flat rate. Local/city taxes are not included.
+        </div>
+      `;
+    case 'prior_refund':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:8px">Prior-year state/local tax refund received:</label>
+          <input type="number" id="modal-prior-refund" min="0" step="100" value="${STATE.taxData.priorRefund || 0}" placeholder="0" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit">
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          If you <strong>itemized</strong> deductions last year and deducted state taxes, your state refund may be taxable this year. If you took the standard deduction last year, this is not taxable. Enter $0 if unsure.
+        </div>
+      `;
+    case 'other_income':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">Enter any additional income not captured from your documents:</label>
+          <div style="display:grid;gap:8px">
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Gambling winnings (W-2G)</label>
+              <input type="number" id="modal-gambling" min="0" step="100" value="${STATE.taxData.gamblingIncome || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Alimony received (divorce finalized before 2019)</label>
+              <input type="number" id="modal-alimony-received" min="0" step="100" value="${STATE.taxData.alimonyReceived || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Rental income (net of expenses)</label>
+              <input type="number" id="modal-rental" min="0" step="100" value="${STATE.taxData.rentalIncome || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Other miscellaneous income (jury duty, prizes, etc.)</label>
+              <input type="number" id="modal-other-misc" min="0" step="100" value="${STATE.taxData.otherMiscIncome || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+          </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          This income goes on Schedule 1 and is added to your total income. Gambling losses can offset winnings but only if you itemize.
+        </div>
+      `;
+    case 'other_deductions':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">Additional above-the-line deductions:</label>
+          <div style="display:grid;gap:8px">
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Educator expenses (max $300)</label>
+              <input type="number" id="modal-educator" min="0" max="300" step="10" value="${STATE.taxData.educatorExpenses || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Alimony paid (divorce finalized before 2019 only)</label>
+              <input type="number" id="modal-alimony-paid" min="0" step="100" value="${STATE.taxData.alimonyPaid || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Moving expenses (active-duty military only)</label>
+              <input type="number" id="modal-moving" min="0" step="100" value="${STATE.taxData.movingExpenses || 0}" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+          </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>Educator expenses:</strong> K-12 teachers can deduct up to $300 for classroom supplies.<br>
+          <strong>Alimony paid:</strong> Only deductible for divorce/separation agreements executed before 2019.<br>
+          <strong>Moving expenses:</strong> Only for active-duty military members.
+        </div>
+      `;
+    case 'other_credits':
+      return `
+        <div style="margin-bottom:16px">
+          <label style="display:block;color:var(--text-muted);font-size:13px;margin-bottom:12px">Additional tax credits:</label>
+          <div style="display:grid;gap:8px">
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Child and dependent care credit (Form 2441)</label>
+              <input type="number" id="modal-childcare" min="0" step="100" value="${STATE.taxData.childCareCredit || 0}" placeholder="0" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Retirement savings (saver's) credit</label>
+              <input type="number" id="modal-savers" min="0" step="100" value="${STATE.taxData.saversCredit || 0}" placeholder="0" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+            <div>
+              <label style="display:block;color:var(--text-dim);font-size:12px;margin-bottom:4px">Residential energy credit (Form 5695)</label>
+              <input type="number" id="modal-energy" min="0" step="100" value="${STATE.taxData.energyCredit || 0}" placeholder="0" style="width:100%;padding:8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            </div>
+          </div>
+        </div>
+        <div style="color:var(--text-dim);font-size:12px;line-height:1.5">
+          <strong>Child care:</strong> 20-35% of up to $3,000 ($6,000 for 2+ kids) in care expenses.<br>
+          <strong>Saver's credit:</strong> Up to $1,000 ($2,000 MFJ) for low/moderate income retirement savers.<br>
+          <strong>Energy credit:</strong> 30% of qualified clean energy improvements (solar, heat pumps, etc.).
+        </div>
+      `;
     case 'sched_c_expenses':
       return `
         <div style="margin-bottom:16px">
@@ -3223,6 +3565,34 @@ function applyAssumptionChange(id) {
       STATE.taxData.estimatedPayments = parseFloat(document.getElementById('modal-est-payments')?.value) || 0;
       break;
     }
+    case 'select_state': {
+      const val = document.getElementById('modal-state')?.value;
+      if (val !== undefined) STATE.taxData.stateCode = val;
+      break;
+    }
+    case 'prior_refund': {
+      STATE.taxData.priorRefund = parseFloat(document.getElementById('modal-prior-refund')?.value) || 0;
+      break;
+    }
+    case 'other_income': {
+      STATE.taxData.gamblingIncome = parseFloat(document.getElementById('modal-gambling')?.value) || 0;
+      STATE.taxData.alimonyReceived = parseFloat(document.getElementById('modal-alimony-received')?.value) || 0;
+      STATE.taxData.rentalIncome = parseFloat(document.getElementById('modal-rental')?.value) || 0;
+      STATE.taxData.otherMiscIncome = parseFloat(document.getElementById('modal-other-misc')?.value) || 0;
+      break;
+    }
+    case 'other_deductions': {
+      STATE.taxData.educatorExpenses = parseFloat(document.getElementById('modal-educator')?.value) || 0;
+      STATE.taxData.alimonyPaid = parseFloat(document.getElementById('modal-alimony-paid')?.value) || 0;
+      STATE.taxData.movingExpenses = parseFloat(document.getElementById('modal-moving')?.value) || 0;
+      break;
+    }
+    case 'other_credits': {
+      STATE.taxData.childCareCredit = parseFloat(document.getElementById('modal-childcare')?.value) || 0;
+      STATE.taxData.saversCredit = parseFloat(document.getElementById('modal-savers')?.value) || 0;
+      STATE.taxData.energyCredit = parseFloat(document.getElementById('modal-energy')?.value) || 0;
+      break;
+    }
     case 'sched_c_expenses': {
       if (STATE.taxData.scheduleC) {
         STATE.taxData.scheduleC.advertising = parseFloat(document.getElementById('modal-biz-advertising')?.value) || 0;
@@ -3301,6 +3671,11 @@ function shareSummary() {
     `Total Payments: $${fmt(r.totalPayments)}`,
     r.refundOrOwed >= 0 ? `Estimated Refund: $${fmt(r.refundOrOwed)}` : `Amount Owed: $${fmt(Math.abs(r.refundOrOwed))}`,
     `Effective Rate: ${r.effectiveRate.toFixed(1)}% | Marginal Rate: ${r.marginalRate}%`,
+    ...(r.stateResult && r.stateResult.tax > 0 ? [
+      '',
+      `${r.stateResult.stateName} State Tax: $${fmt(r.stateResult.tax)}`,
+      r.stateResult.refundOrOwed >= 0 ? `State Refund: $${fmt(r.stateResult.refundOrOwed)}` : `State Owed: $${fmt(Math.abs(r.stateResult.refundOrOwed))}`,
+    ] : []),
     '',
     'Generated at reviewmytaxes.com — DRAFT, NOT FOR FILING',
   ].join('\n');
@@ -3341,6 +3716,7 @@ function downloadSummary() {
   if (r.totalRetirement > 0) lines.push(`  Retirement (1099-R):   $${fmt(r.totalRetirement)}`);
   if (r.schedCNet !== 0) lines.push(`  Business income (C):   $${fmt(r.schedCNet)}`);
   if (r.netSTCG + r.netLTCG !== 0) lines.push(`  Capital gains/losses:  $${fmt(r.netSTCG + r.netLTCG)}`);
+  if (r.otherIncome > 0) lines.push(`  Other income:          $${fmt(r.otherIncome)}`);
   lines.push(`  Total Income:          $${fmt(r.totalIncome)}`);
   lines.push('');
   lines.push('── DEDUCTIONS & TAXABLE INCOME ─────────────────────────');
@@ -3364,6 +3740,17 @@ function downloadSummary() {
   lines.push(`  ${r.refundOrOwed >= 0 ? 'ESTIMATED REFUND' : 'AMOUNT OWED'}:      $${fmt(Math.abs(r.refundOrOwed))}`);
   lines.push(`  Effective Rate:        ${r.effectiveRate.toFixed(1)}%`);
   lines.push(`  Marginal Rate:         ${r.marginalRate}%`);
+  if (r.stateResult && r.stateResult.tax > 0) {
+    lines.push('');
+    lines.push('── STATE TAX (' + r.stateResult.stateName.toUpperCase() + ') ────────────────────────────');
+    lines.push(`  State AGI:             $${fmt(r.stateResult.stateAGI)}`);
+    lines.push(`  State Deduction:       $${fmt(r.stateResult.deduction)}`);
+    lines.push(`  State Taxable Income:  $${fmt(r.stateResult.taxableIncome)}`);
+    lines.push(`  State Tax:             $${fmt(r.stateResult.tax)}`);
+    if (r.stateResult.withheld > 0) lines.push(`  State Withheld:        $${fmt(r.stateResult.withheld)}`);
+    lines.push(`  ${r.stateResult.refundOrOwed >= 0 ? 'STATE REFUND' : 'STATE OWED'}:          $${fmt(Math.abs(r.stateResult.refundOrOwed))}`);
+    lines.push(`  State Effective Rate:  ${r.stateResult.effectiveRate.toFixed(1)}%`);
+  }
   lines.push('');
   lines.push('═══════════════════════════════════════════════════════');
   lines.push('  DRAFT — NOT FOR FILING');
