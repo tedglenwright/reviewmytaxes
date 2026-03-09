@@ -3,7 +3,7 @@
     --border: #475569; --accent: #3b82f6; --accent-light: #60a5fa;
     --green: #22c55e; --green-dark: #15803d; --red: #ef4444; --red-dark: #b91c1c;
     --yellow: #eab308; --orange: #f97316;
-    --text: #f8fafc; --text-muted: #94a3b8; --text-dim: #64748b;
+    --text: #f8fafc; --text-muted: #94a3b8; --text-dim: #7d8da0;
     --draft-bg: rgba(239, 68, 68, 0.10);
     --gradient-start: #3b82f6; --gradient-end: #22c55e;
     --glass-bg: rgba(30, 41, 59, 0.6); --glass-border: rgba(71, 85, 105, 0.4);
@@ -497,7 +497,7 @@
     .pricing-grid { grid-template-columns: 1fr; }
     .security-grid { grid-template-columns: 1fr; }
     .how-steps { grid-template-columns: repeat(2,1fr); }
-    .form8949-table { font-size: 10px; }
+    .form8949-table { font-size: 11px; }
     .form8949-table th, .form8949-table td { padding: 4px 4px; }
     .top-bar { flex-direction: column; gap: 8px; padding: 8px 16px; }
     .top-bar-left { flex-wrap: wrap; gap: 8px; }

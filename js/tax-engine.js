@@ -267,9 +267,13 @@ function computeTaxReturn(data) {
 
     if (schedCNet >= 400) {
       const seEarnings = schedCNet * 0.9235;
-      const ssSE = Math.min(seEarnings, TAX.ssWageBase) * TAX.ssRate;
+      // Coordinate SS wage base with W-2 wages: only remaining base is subject to SS tax
+      const ssWageBaseRemaining = Math.max(0, TAX.ssWageBase - totalWages);
+      const ssSE = Math.min(seEarnings, ssWageBaseRemaining) * TAX.ssRate;
       const medSE = seEarnings * TAX.medicareRate;
-      const addlMed = Math.max(0, seEarnings - TAX.additionalMedicareThreshold[fs]) * TAX.additionalMedicareRate;
+      // Additional Medicare: SE earnings above the threshold minus W-2 wages already counted
+      const addlMedThresholdRemaining = Math.max(0, TAX.additionalMedicareThreshold[fs] - totalWages);
+      const addlMed = Math.max(0, seEarnings - addlMedThresholdRemaining) * TAX.additionalMedicareRate;
       seTax = Math.round(ssSE + medSE + addlMed);
       seDeduction = Math.round(seTax / 2);
       schedules.SE = { netEarnings: Math.round(seEarnings), ssTax: Math.round(ssSE), medicareTax: Math.round(medSE), additionalMedicare: Math.round(addlMed), totalSETax: seTax, deduction: seDeduction };

@@ -1804,6 +1804,7 @@ async function handleAdditionalUpload(event) {
   const uploadKey = 'upload_additional_' + Date.now();
   if (!STATE.answeredQs.has(uploadKey)) {
     if (PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.per_question) {
+      saveTaxData(); // Persist state before leaving for payment
       window.location.href = STRIPE_PAYMENT_LINKS.per_question;
       return;
     }
@@ -1813,7 +1814,7 @@ async function handleAdditionalUpload(event) {
         const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
         payment.usedQuestions = (payment.usedQuestions || 0) + 1;
         localStorage.setItem('rmt_payment', JSON.stringify(payment));
-      } catch(e) {}
+      } catch(e) { rlog('ERROR', e.message); }
     }
     STATE.answeredQs.add(uploadKey);
     saveAnswered();
@@ -1895,7 +1896,8 @@ async function handle1031Upload(event) {
     const docKey = '1031_doc_' + Date.now() + '_' + i;
     if (!STATE.answeredQs.has(docKey)) {
       if (PAID_QUESTIONS <= 0 && STRIPE_PAYMENT_LINKS.per_question) {
-        window.location.href = STRIPE_PAYMENT_LINKS.per_question;
+        saveTaxData(); // Persist state before leaving for payment
+      window.location.href = STRIPE_PAYMENT_LINKS.per_question;
         return;
       }
       if (PAID_QUESTIONS > 0) {
@@ -1904,7 +1906,7 @@ async function handle1031Upload(event) {
           const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
           payment.usedQuestions = (payment.usedQuestions || 0) + 1;
           localStorage.setItem('rmt_payment', JSON.stringify(payment));
-        } catch(e) {}
+        } catch(e) { rlog('ERROR', e.message); }
       }
       STATE.answeredQs.add(docKey);
       saveAnswered();
@@ -2041,7 +2043,8 @@ function runScenario(scenarioId) {
     if (PAID_QUESTIONS <= 0) {
       if (STRIPE_PAYMENT_LINKS.per_question) {
         localStorage.setItem('rmt_pending_question', compareKey);
-        window.location.href = STRIPE_PAYMENT_LINKS.per_question;
+        saveTaxData(); // Persist state before leaving for payment
+      window.location.href = STRIPE_PAYMENT_LINKS.per_question;
         return;
       }
     }
@@ -2051,7 +2054,7 @@ function runScenario(scenarioId) {
         var payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
         payment.usedQuestions = (payment.usedQuestions || 0) + 1;
         localStorage.setItem('rmt_payment', JSON.stringify(payment));
-      } catch(e) {}
+      } catch(e) { rlog('ERROR', e.message); }
     }
     STATE.answeredQs.add(compareKey);
     saveAnswered();
@@ -2084,7 +2087,7 @@ function runScenario(scenarioId) {
   var taxDiff = altResult.totalTax - current.totalTax;
 
   var creditsRow = '';
-  try { creditsRow = compareRow('Credits', current.schedules['3'].totalCredits, altResult.schedules['3'].totalCredits); } catch(e) {}
+  try { creditsRow = compareRow('Credits', current.schedules['3'].totalCredits, altResult.schedules['3'].totalCredits); } catch(e) { rlog('ERROR', e.message); }
 
   var stateRow = '';
   if (current.stateResult && altResult.stateResult) {
@@ -2205,6 +2208,7 @@ function answerQuestion(id) {
     if (STRIPE_PAYMENT_LINKS.per_question) {
       rlog('REDIRECT_TO_STRIPE', { questionId: id, link: STRIPE_PAYMENT_LINKS.per_question });
       localStorage.setItem('rmt_pending_question', id);
+      saveTaxData(); // Persist state before leaving for payment
       window.location.href = STRIPE_PAYMENT_LINKS.per_question;
       return;
     }
@@ -2220,7 +2224,7 @@ function answerQuestion(id) {
       const payment = JSON.parse(localStorage.getItem('rmt_payment') || '{}');
       payment.usedQuestions = (payment.usedQuestions || 0) + 1;
       localStorage.setItem('rmt_payment', JSON.stringify(payment));
-    } catch(e) {}
+    } catch(e) { rlog('ERROR', e.message); }
   }
 
   if (formHtml) {
