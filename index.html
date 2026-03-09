@@ -3,7 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tax Return Draft Preview — 2025</title>
+<meta name="description" content="Free, private tax return preview. Upload your W-2s and 1099s to get an instant draft Form 1040 with all schedules. 100% client-side — your data never leaves your browser.">
+<meta name="keywords" content="tax return, 1040, W-2, 1099, tax calculator, free tax, privacy, open source">
+<meta property="og:title" content="ReviewMyTaxes — Free Tax Return Draft Preview">
+<meta property="og:description" content="Upload your tax documents and get an instant draft return. 100% private — runs entirely in your browser.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="ReviewMyTaxes — Free Tax Return Draft Preview">
+<meta name="twitter:description" content="Upload W-2s & 1099s for an instant draft tax return. 100% private, open source, no server.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1f4cb;</text></svg>">
+<title>ReviewMyTaxes — Free Tax Return Draft Preview 2025</title>
 <script src="https://js.stripe.com/v3/"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
@@ -1609,10 +1618,10 @@ function renderUpload() {
         <div>
           <div class="headline">Your documents never leave your device</div>
           <div class="detail">
-            All processing happens <strong>100% in your browser</strong> using local OCR.
+            All tax processing happens <strong>100% in your browser</strong> using local OCR and JavaScript.
             <strong>No server. No uploads. No database. No accounts.</strong>
             Your W-2s, 1099s, and financial data are never transmitted anywhere — not to us, not to any third party.
-            You could disconnect from the internet right now and this app would still work.
+            You could disconnect from the internet right now and everything still works (except loading the OCR engine initially).
           </div>
           <div class="verify-badge" onclick="showVerifyPanel()">&#x2705; Verify it yourself — click to inspect</div>
         </div>
@@ -1876,29 +1885,23 @@ function renderReturn(r) {
         ${sectionHeader('Form 1040 — Income', 'Lines 1–9')}
         ${r.totalWages > 0 ? (() => {
           let wageHtml = lineItem('1a. Wages, salaries, tips', r.totalWages, {onClick: r.w2s.some(w=>w._sourceURL) ? 'showAllSourceDocs()' : ''});
-          if (r.w2s.length > 1) {
-            r.w2s.forEach((w, i) => {
-              wageHtml += lineItem('   ' + (w.employer || 'Employer ' + (i+1)), w.wages, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
-            });
-          }
+          r.w2s.forEach((w, i) => {
+            wageHtml += lineItem('   ' + (w.employer || 'Employer ' + (i+1)), w.wages, {sub:true, onClick: w._sourceURL ? 'showSourceDoc('+i+')' : ''});
+          });
           return wageHtml;
         })() : ''}
         ${r.totalInterest > 0 ? (() => {
           let intHtml = lineItem('2b. Taxable interest', r.totalInterest, {onClick: r.interest.some(i=>i._sourceURL) ? 'showInterestSource(0)' : ''});
-          if (r.interest.length > 1) {
-            r.interest.forEach((item, i) => {
-              intHtml += lineItem('   ' + item.payer, item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+i+')' : ''});
-            });
-          }
+          r.interest.forEach((item, i) => {
+            intHtml += lineItem('   ' + item.payer, item.amount, {sub:true, onClick: item._sourceURL ? 'showInterestSource('+i+')' : ''});
+          });
           return intHtml;
         })() : ''}
         ${r.totalOrdDiv > 0 ? (() => {
           let divHtml = lineItem('3a. Ordinary dividends', r.totalOrdDiv, {onClick: r.dividends.some(d=>d._sourceURL) ? 'showDividendSource(0)' : ''});
-          if (r.dividends.length > 1) {
-            r.dividends.forEach((item, i) => {
-              divHtml += lineItem('   ' + item.payer, item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+i+')' : ''});
-            });
-          }
+          r.dividends.forEach((item, i) => {
+            divHtml += lineItem('   ' + item.payer, item.ordinary, {sub:true, onClick: item._sourceURL ? 'showDividendSource('+i+')' : ''});
+          });
           return divHtml;
         })() : ''}
         ${r.totalQualDiv > 0 ? lineItem('3b. Qualified dividends', r.totalQualDiv, {sub:true}) : ''}
@@ -2002,6 +2005,47 @@ function renderReturn(r) {
       </div>
     </div>
   `;
+
+  // Tax Savings Tips (personalized based on user's situation)
+  const tips = [];
+  if (!STATE.taxData.hsaContribution && !STATE.answeredQs.has('no_hsa')) {
+    tips.push({ icon: '&#x1f3e5;', title: 'HSA Contributions', text: `Contributing to an HSA could reduce your taxable income by up to $${(r.filingStatus === 'mfj' ? 8550 : 4300).toLocaleString()}.` });
+  }
+  if (!STATE.taxData.iraContribution && !STATE.answeredQs.has('no_hsa')) {
+    tips.push({ icon: '&#x1f4b0;', title: 'IRA Contributions', text: 'A Traditional IRA contribution (up to $7,000) reduces your taxable income directly.' });
+  }
+  if (!STATE.taxData.dependents && !STATE.answeredQs.has('dependents')) {
+    tips.push({ icon: '&#x1f476;', title: 'Child Tax Credit', text: 'If you have children under 17, the $2,000/child credit could significantly reduce your tax.' });
+  }
+  if (r.schedCNet > 0 && r.schedules.C && r.schedules.C.totalExpenses === 0) {
+    tips.push({ icon: '&#x1f4bc;', title: 'Business Expenses', text: 'You have self-employment income but no expenses deducted. Home office, supplies, mileage, and internet may be deductible.' });
+  }
+  if (!r.usingItemized && r.totalStateWithheld > 0) {
+    const potentialSalt = Math.min(r.totalStateWithheld, TAX.saltCap[r.filingStatus]);
+    tips.push({ icon: '&#x1f3e0;', title: 'Itemized Deductions', text: `Your state taxes ($${fmt(r.totalStateWithheld)}) alone may push you toward itemizing if you also have mortgage interest or charitable contributions.` });
+  }
+  if (r.marginalRate >= 24 && !STATE.taxData.educationCredit) {
+    tips.push({ icon: '&#x1f393;', title: 'Education Credits', text: 'If you or a dependent are in college, the AOTC ($2,500) or LLC ($2,000) could help.' });
+  }
+
+  if (tips.length > 0) {
+    html += sectionHeader('Potential Tax Savings', 'Based on your return');
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-bottom:16px">`;
+    tips.forEach(tip => {
+      html += `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer" onclick="setTab('assumptions')">
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <div style="font-size:20px;flex-shrink:0">${tip.icon}</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--green)">${tip.title}</div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:4px;line-height:1.4">${tip.text}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+  }
 
   // Schedule A
   if (r.schedules.A) {
