@@ -416,10 +416,8 @@ class TaxDocumentParser {
     const upper = text.toUpperCase();
     const fname = filename.toUpperCase();
 
-    // W-2 detection
-    if (upper.includes('W-2') || upper.includes('WAGE AND TAX') || fname.includes('W2') || fname.includes('W-2')) {
-      return this.parseW2(text);
-    }
+    // Check 1099/1098 types FIRST (before W-2) — consolidated brokerage statements
+    // often mention "W-2" in boilerplate text, so W-2 must be checked last
     // 1099-INT
     if (upper.includes('1099-INT') || upper.includes('INTEREST INCOME') || fname.includes('1099INT') || fname.includes('1099-INT')) {
       return this.parse1099INT(text);
@@ -459,6 +457,10 @@ class TaxDocumentParser {
     // 1098 Mortgage
     if (upper.includes('1098') || upper.includes('MORTGAGE INTEREST') || fname.includes('1098')) {
       return this.parse1098(text);
+    }
+    // W-2 — checked LAST, with strict matching to avoid false positives from brokerage docs
+    if (upper.includes('WAGE AND TAX STATEMENT') || /FORM\s+W[\s-]*2\b/.test(upper) || fname.includes('W2') || fname.includes('W-2')) {
+      return this.parseW2(text);
     }
 
     this.onLog('⚠ Could not classify document type — attempting best-effort extraction');
