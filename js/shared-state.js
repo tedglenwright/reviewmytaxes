@@ -49,8 +49,8 @@ function showDebugLog() {
 // ═══════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
-const APP_BUILD = document.querySelector('meta[name="build"]')?.content || 'BUILD_TOKEN';
-const APP_VERSION = 'v1.0.' + APP_BUILD;
+const APP_BUILD = document.querySelector('meta[name="build"]')?.content || 'dev';
+const APP_VERSION = 'v1.1.' + APP_BUILD;
 const GITHUB_REPO = 'https://github.com/tedglenwright/reviewmytaxes';
 const GITHUB_SOURCE = GITHUB_REPO + '/blob/main/index.html';
 const GITHUB_ISSUES = GITHUB_REPO + '/issues';

@@ -115,7 +115,10 @@ if (!loadTaxData() || !STATE.taxData) {
             <h1 style="color:var(--text);font-size:22px;font-weight:800;margin:0">Schedules & Forms</h1>
             <div style="color:var(--text-dim);font-size:12px;margin-top:4px">${APP_VERSION} · $5 per schedule edit</div>
           </div>
-          <a href="index.html" class="btn-back-link" style="padding:8px 16px;font-size:13px">← Back to Return</a>
+          <div style="display:flex;align-items:center;gap:8px">
+            <a href="index.html" class="btn-back-link" style="padding:8px 16px;font-size:13px">← Back to Return</a>
+            <span style="color:var(--text-muted);font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:6px;padding:4px 8px">${APP_VERSION}</span>
+          </div>
         </div>
 
         ${result ? `

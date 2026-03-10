@@ -251,7 +251,7 @@ function renderUpload() {
     <div class="container">
       <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:-20px">
         <button onclick="toggleTheme();render();" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer" title="Toggle light/dark mode">${getTheme() === 'dark' ? '☀️' : '🌙'}</button>
-        <span style="color:var(--text-dim);font-size:10px;font-weight:600">${APP_VERSION}</span>${HAS_NEW_VERSION ? '<span onclick="showChangelog();markVersionSeen();render();" style="margin-left:6px;padding:2px 8px;background:var(--green);color:#fff;border-radius:10px;font-size:9px;font-weight:700;cursor:pointer">NEW</span>' : ''}
+        <span onclick="showChangelog();markVersionSeen();render();" style="color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:4px 8px;position:relative" title="Click for changelog">${APP_VERSION}${HAS_NEW_VERSION ? '<span style="position:absolute;top:-4px;right:-8px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>' : ''}</span>
       </div>
       <div class="upload-hero-wrapper">
         <div class="hero-orb hero-orb-1"></div>
@@ -562,6 +562,10 @@ function renderParsing() {
   const docsFound = STATE.parsedDocs.length;
   app.innerHTML = `
     <div class="container">
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:-20px">
+        <button onclick="toggleTheme();render();" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer" title="Toggle light/dark mode">${getTheme() === 'dark' ? '☀️' : '🌙'}</button>
+        <span style="color:var(--text-muted);font-size:11px;font-weight:600;border:1px solid var(--border);border-radius:6px;padding:4px 8px">${APP_VERSION}</span>
+      </div>
       <div class="upload-hero">
         <h1>Parsing Your Documents</h1>
         <p>Extracting tax data using PDF.js and Tesseract OCR — all processing happens in your browser</p>
@@ -612,9 +616,9 @@ function renderReview() {
         <button onclick="downloadSummary()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Download text summary">Text</button>
         <button onclick="downloadPDF()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Export as printable PDF">PDF</button>
         <button onclick="window.print()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;font-family:inherit" title="Print draft return">Print</button>
-        <span onclick="showChangelog(); markVersionSeen();" style="color:var(--text-dim);font-size:10px;font-weight:600;cursor:pointer;position:relative" title="Click for changelog">${APP_VERSION}${HAS_NEW_VERSION ? '<span style="position:absolute;top:-4px;right:-8px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>' : ''}</span>
         <button onclick="toggleTheme()" style="background:none;border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer" title="Toggle light/dark mode">${getTheme() === 'dark' ? '☀️' : '🌙'}</button>
-        <span onclick="showDebugLog()" style="color:var(--text-dim);font-size:9px;cursor:pointer;margin-left:4px;opacity:0.5" title="View activity log">log</span>
+        <span onclick="showChangelog(); markVersionSeen();" style="color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:4px 8px;position:relative" title="Click for changelog">${APP_VERSION}${HAS_NEW_VERSION ? '<span style="position:absolute;top:-4px;right:-8px;width:6px;height:6px;background:var(--green);border-radius:50%"></span>' : ''}</span>
+        <span onclick="showDebugLog()" style="color:var(--text-dim);font-size:9px;cursor:pointer;margin-left:2px;opacity:0.5" title="View activity log">log</span>
       </div>
     </div>
     <div class="tabs" role="tablist" aria-label="Tax return sections">
