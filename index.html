@@ -1801,18 +1801,37 @@ function addFiles(fileList) {
   const validExts = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp', '.heic', '.heif'];
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   let skipped = 0, tooLarge = 0, dupes = 0;
+  const skippedNames = [];
   const existingNames = new Set(STATE.files.map(f => f.name + '_' + f.size));
-  for (const f of fileList) {
+
+  function isValidFile(f) {
     const ext = '.' + f.name.split('.').pop().toLowerCase();
-    if (!validTypes.includes(f.type) && !validExts.includes(ext)) {
+    // Accept known MIME types
+    if (validTypes.includes(f.type)) return true;
+    // Accept known extensions
+    if (validExts.includes(ext)) return true;
+    // Accept generic binary types (Google Drive, iOS often use these for PDFs)
+    if (f.type === 'application/octet-stream' || f.type === 'application/x-pdf' || f.type === '') return true;
+    // Accept anything that starts with image/ (covers unusual image MIME types)
+    if (f.type.startsWith('image/')) return true;
+    return false;
+  }
+
+  for (const f of fileList) {
+    rlog('FILE_UPLOAD_ATTEMPT', { name: f.name, type: f.type, size: f.size, ext: '.' + f.name.split('.').pop().toLowerCase() });
+    if (!isValidFile(f)) {
       skipped++;
+      skippedNames.push(f.name + ' (type: ' + (f.type || 'empty') + ')');
+      rlog('FILE_REJECTED', { name: f.name, type: f.type, reason: 'unsupported format' });
     } else if (f.size > MAX_FILE_SIZE) {
       tooLarge++;
+      rlog('FILE_REJECTED', { name: f.name, size: f.size, reason: 'too large' });
     } else if (existingNames.has(f.name + '_' + f.size)) {
       dupes++;
     } else {
       STATE.files.push(f);
       existingNames.add(f.name + '_' + f.size);
+      rlog('FILE_ACCEPTED', { name: f.name, type: f.type, size: f.size });
     }
   }
   const msgs = [];
@@ -1820,7 +1839,9 @@ function addFiles(fileList) {
   if (tooLarge > 0) msgs.push(`${tooLarge} over 50MB limit`);
   if (dupes > 0) msgs.push(`${dupes} duplicate`);
   if (msgs.length > 0) {
-    showToast(`Skipped: ${msgs.join(', ')}`, 'error');
+    const detail = skippedNames.length > 0 ? '\n' + skippedNames.join('\n') : '';
+    showToast(`Skipped: ${msgs.join(', ')}${detail}`, 'error');
+    rlog('FILES_SKIPPED', { skipped, tooLarge, dupes, skippedNames });
   }
   render();
 }
