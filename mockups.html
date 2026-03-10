@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReviewMyTaxes — Design Mockups</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
+  .picker { position: sticky; top: 0; z-index: 100; background: #fff; border-bottom: 1px solid #e2e8f0; padding: 16px 24px; display: flex; gap: 12px; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .picker h2 { font-size: 16px; font-weight: 700; margin-right: 16px; }
+  .picker button { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; font-family: inherit; }
+  .picker button.active { transform: scale(1.05); }
+  .picker .opt-a { background: #eef2ff; color: #4338ca; }
+  .picker .opt-a.active { border-color: #4338ca; box-shadow: 0 4px 12px rgba(67,56,202,0.2); }
+  .picker .opt-b { background: #fdf4ff; color: #7e22ce; }
+  .picker .opt-b.active { border-color: #7e22ce; box-shadow: 0 4px 12px rgba(126,34,206,0.2); }
+  .picker .opt-c { background: #f0fdf4; color: #166534; }
+  .picker .opt-c.active { border-color: #166534; box-shadow: 0 4px 12px rgba(22,101,52,0.2); }
+  .mockup { display: none; }
+  .mockup.active { display: block; }
+  .desc { max-width: 800px; margin: 24px auto 0; padding: 16px 24px; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 14px; line-height: 1.7; }
+  .desc h3 { font-size: 16px; margin-bottom: 8px; }
+  .desc ul { margin-left: 20px; }
+  .frame { max-width: 960px; margin: 16px auto 40px; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 8px 32px rgba(0,0,0,0.08); }
+
+  /* ═══════════════════════════════════════════ */
+  /* OPTION A: Clean Professional (Indigo/Slate) */
+  /* ═══════════════════════════════════════════ */
+  .theme-a { --bg: #ffffff; --surface: #f8fafc; --border: #e2e8f0; --accent: #4f46e5; --accent-light: #6366f1; --green: #059669; --red: #dc2626; --text: #0f172a; --text-muted: #64748b; --text-dim: #94a3b8; }
+  .theme-a .mock-page { background: var(--bg); padding: 0; min-height: 700px; }
+  .theme-a .mock-hero {
+    padding: 48px 32px 40px; text-align: center;
+    background: linear-gradient(180deg, #eef2ff 0%, #ffffff 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .theme-a .mock-hero h1 { font-size: 38px; font-weight: 800; color: #1e293b; letter-spacing: -1px; }
+  .theme-a .mock-hero h1 span { color: var(--accent); }
+  .theme-a .mock-hero p { color: var(--text-muted); font-size: 16px; margin-top: 10px; }
+  .theme-a .mock-badges { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+  .theme-a .mock-badge { padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .theme-a .mock-badge.priv { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+  .theme-a .mock-badge.free { background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; }
+  .theme-a .mock-content { padding: 32px; max-width: 700px; margin: 0 auto; }
+  .theme-a .mock-dropzone {
+    border: 2px dashed #cbd5e1; border-radius: 16px; padding: 40px; text-align: center;
+    background: #f8fafc; transition: all 0.2s;
+  }
+  .theme-a .mock-dropzone:hover { border-color: var(--accent); background: #eef2ff; }
+  .theme-a .mock-dropzone .icon { font-size: 36px; margin-bottom: 12px; }
+  .theme-a .mock-dropzone .title { font-size: 16px; font-weight: 700; color: var(--text); }
+  .theme-a .mock-dropzone .sub { color: var(--text-muted); font-size: 13px; margin-top: 6px; }
+  .theme-a .mock-pills { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .theme-a .mock-pill { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+  .theme-a .mock-btn { width: 100%; padding: 14px; background: #4f46e5; color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 700; margin-top: 20px; cursor: pointer; }
+  .theme-a .mock-btn:hover { background: #4338ca; }
+  .theme-a .mock-demos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 24px; }
+  .theme-a .mock-demo { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: left; }
+  .theme-a .mock-demo:hover { border-color: #4f46e5; }
+  .theme-a .mock-demo .lbl { font-weight: 700; font-size: 13px; }
+  .theme-a .mock-demo .desc { color: #64748b; font-size: 11px; margin-top: 3px; }
+
+  /* Summary cards for option A */
+  .theme-a .mock-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 24px; }
+  .theme-a .mock-scard { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center; }
+  .theme-a .mock-scard .lbl { color: #94a3b8; font-size: 11px; }
+  .theme-a .mock-scard .val { font-size: 20px; font-weight: 800; margin-top: 4px; }
+
+  /* ═══════════════════════════════════════════ */
+  /* OPTION B: Warm & Friendly (Amber/Purple)   */
+  /* ═══════════════════════════════════════════ */
+  .theme-b { --bg: #fffbf5; --accent: #7c3aed; --accent2: #f59e0b; --green: #059669; --red: #dc2626; --text: #1c1917; --text-muted: #78716c; }
+  .theme-b .mock-page { background: var(--bg); min-height: 700px; }
+  .theme-b .mock-hero {
+    padding: 48px 32px 40px; text-align: center;
+    background: linear-gradient(135deg, #fef3c7 0%, #fdf4ff 50%, #ede9fe 100%);
+    border-bottom: 1px solid #e7e5e4;
+  }
+  .theme-b .mock-hero h1 { font-size: 40px; font-weight: 900; color: #1c1917; letter-spacing: -1.5px; }
+  .theme-b .mock-hero h1 span { background: linear-gradient(135deg, #7c3aed, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .theme-b .mock-hero p { color: #78716c; font-size: 16px; margin-top: 10px; }
+  .theme-b .mock-badges { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+  .theme-b .mock-badge { padding: 6px 16px; border-radius: 24px; font-size: 12px; font-weight: 700; }
+  .theme-b .mock-badge.priv { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
+  .theme-b .mock-badge.free { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+  .theme-b .mock-content { padding: 32px; max-width: 700px; margin: 0 auto; }
+  .theme-b .mock-dropzone {
+    border: 2px dashed #d6d3d1; border-radius: 20px; padding: 44px; text-align: center;
+    background: #ffffff; box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  }
+  .theme-b .mock-dropzone:hover { border-color: #7c3aed; box-shadow: 0 8px 24px rgba(124,58,237,0.08); }
+  .theme-b .mock-dropzone .icon { font-size: 40px; margin-bottom: 12px; }
+  .theme-b .mock-dropzone .title { font-size: 17px; font-weight: 800; color: var(--text); }
+  .theme-b .mock-dropzone .sub { color: #78716c; font-size: 13px; margin-top: 6px; }
+  .theme-b .mock-pills { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .theme-b .mock-pill { padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .theme-b .mock-btn { width: 100%; padding: 16px; background: linear-gradient(135deg, #7c3aed, #9333ea); color: #fff; border: none; border-radius: 14px; font-size: 16px; font-weight: 800; margin-top: 20px; cursor: pointer; box-shadow: 0 4px 16px rgba(124,58,237,0.3); }
+  .theme-b .mock-demos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
+  .theme-b .mock-demo { background: #fff; border: 1px solid #e7e5e4; border-radius: 14px; padding: 16px; text-align: left; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+  .theme-b .mock-demo:hover { border-color: #f59e0b; transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+  .theme-b .mock-demo .lbl { font-weight: 800; font-size: 14px; }
+  .theme-b .mock-demo .desc { color: #78716c; font-size: 11px; margin-top: 4px; }
+
+  .theme-b .mock-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 24px; }
+  .theme-b .mock-scard { background: #fff; border: 1px solid #e7e5e4; border-radius: 14px; padding: 14px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+  .theme-b .mock-scard .lbl { color: #a8a29e; font-size: 11px; }
+  .theme-b .mock-scard .val { font-size: 20px; font-weight: 800; margin-top: 4px; }
+
+  /* ═══════════════════════════════════════════ */
+  /* OPTION C: Official & Trustworthy (Green/Navy) */
+  /* ═══════════════════════════════════════════ */
+  .theme-c { --bg: #ffffff; --accent: #1d4ed8; --accent2: #047857; --text: #111827; --text-muted: #6b7280; }
+  .theme-c .mock-page { background: var(--bg); min-height: 700px; }
+  .theme-c .mock-hero {
+    padding: 40px 32px 36px; text-align: center;
+    background: #1e3a5f;
+    border-bottom: 3px solid #047857;
+  }
+  .theme-c .mock-hero h1 { font-size: 34px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px; font-family: Georgia, 'Times New Roman', serif; }
+  .theme-c .mock-hero h1 span { color: #34d399; }
+  .theme-c .mock-hero p { color: #94a3b8; font-size: 15px; margin-top: 8px; }
+  .theme-c .mock-badges { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+  .theme-c .mock-badge { padding: 5px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .theme-c .mock-badge.priv { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
+  .theme-c .mock-badge.free { background: rgba(96,165,250,0.15); color: #93c5fd; border: 1px solid rgba(96,165,250,0.3); }
+  .theme-c .mock-content { padding: 32px; max-width: 700px; margin: 0 auto; }
+  .theme-c .mock-dropzone {
+    border: 2px solid #d1d5db; border-radius: 8px; padding: 40px; text-align: center;
+    background: #f9fafb;
+  }
+  .theme-c .mock-dropzone:hover { border-color: #1d4ed8; background: #eff6ff; }
+  .theme-c .mock-dropzone .icon { font-size: 36px; margin-bottom: 12px; }
+  .theme-c .mock-dropzone .title { font-size: 16px; font-weight: 700; color: #111827; }
+  .theme-c .mock-dropzone .sub { color: #6b7280; font-size: 13px; margin-top: 6px; }
+  .theme-c .mock-pills { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+  .theme-c .mock-pill { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .theme-c .mock-btn { width: 100%; padding: 14px; background: #047857; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: 700; margin-top: 20px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
+  .theme-c .mock-btn:hover { background: #065f46; }
+  .theme-c .mock-demos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 24px; }
+  .theme-c .mock-demo { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px; text-align: left; border-left: 3px solid #047857; }
+  .theme-c .mock-demo:hover { background: #eff6ff; }
+  .theme-c .mock-demo .lbl { font-weight: 700; font-size: 13px; }
+  .theme-c .mock-demo .desc { color: #6b7280; font-size: 11px; margin-top: 3px; }
+
+  .theme-c .mock-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 24px; }
+  .theme-c .mock-scard { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px; text-align: center; border-top: 3px solid #1d4ed8; }
+  .theme-c .mock-scard .lbl { color: #9ca3af; font-size: 11px; }
+  .theme-c .mock-scard .val { font-size: 20px; font-weight: 800; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="picker">
+  <h2>Pick a Look:</h2>
+  <button class="opt-a active" onclick="show('a')">A: Clean Professional</button>
+  <button class="opt-b" onclick="show('b')">B: Warm & Friendly</button>
+  <button class="opt-c" onclick="show('c')">C: Official & Trustworthy</button>
+</div>
+
+<!-- OPTION A: Clean Professional -->
+<div class="mockup active" id="mock-a">
+  <div class="desc">
+    <h3>Option A: Clean Professional</h3>
+    <ul>
+      <li>Minimal, corporate feel — white backgrounds with soft indigo accents</li>
+      <li>Subtle gradient hero (indigo to white), no orbs or glow effects</li>
+      <li>Flat design with light borders, no shadows or glassmorphism</li>
+      <li>Feels like a modern SaaS product (think Stripe, Linear)</li>
+    </ul>
+  </div>
+  <div class="frame">
+    <div class="theme-a">
+      <div class="mock-page">
+        <div class="mock-hero">
+          <h1>Review<span>My</span>Taxes</h1>
+          <p>Free, private tax return preview — runs entirely in your browser</p>
+          <div class="mock-badges">
+            <span class="mock-badge priv">&#128274; 100% Private</span>
+            <span class="mock-badge free">&#x2728; Free &amp; Open Source</span>
+          </div>
+        </div>
+        <div class="mock-content">
+          <div class="mock-dropzone">
+            <div class="icon">&#128228;</div>
+            <div class="title">Drop your tax documents here</div>
+            <div class="sub">or click to browse files</div>
+            <div class="mock-pills">
+              <span class="mock-pill">W-2</span>
+              <span class="mock-pill">1099-INT</span>
+              <span class="mock-pill">1099-DIV</span>
+              <span class="mock-pill">1099-NEC</span>
+              <span class="mock-pill">1099-B</span>
+              <span class="mock-pill">1099-R</span>
+              <span class="mock-pill">1098</span>
+            </div>
+          </div>
+          <div class="mock-btn">Generate Draft Return</div>
+          <div style="text-align:center;margin-top:14px;font-size:13px;font-weight:700;color:#64748b">or try with sample data</div>
+          <div class="mock-demos">
+            <div class="mock-demo"><div class="lbl">&#x1f4bc; Simple W-2</div><div class="desc">Single filer, one W-2</div></div>
+            <div class="mock-demo"><div class="lbl">&#x1f4bb; Freelancer</div><div class="desc">Self-employed + investments</div></div>
+            <div class="mock-demo"><div class="lbl">&#x1f468;&#x200d;&#x1f469;&#x200d;&#x1f467;&#x200d;&#x1f466; Married Family</div><div class="desc">Joint filers, kids, mortgage</div></div>
+          </div>
+          <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:13px;font-weight:600;color:#94a3b8">Review Screen Preview</div>
+          <div class="mock-summary">
+            <div class="mock-scard"><div class="lbl">Total Income</div><div class="val" style="color:#0f172a">$85,000</div></div>
+            <div class="mock-scard"><div class="lbl">Total Tax</div><div class="val" style="color:#ea580c">$14,260</div></div>
+            <div class="mock-scard"><div class="lbl">Estimated Refund</div><div class="val" style="color:#059669">$1,140</div></div>
+            <div class="mock-scard"><div class="lbl">Effective Rate</div><div class="val" style="color:#4f46e5">16.8%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OPTION B: Warm & Friendly -->
+<div class="mockup" id="mock-b">
+  <div class="desc">
+    <h3>Option B: Warm & Friendly</h3>
+    <ul>
+      <li>Warm cream background with purple/amber accents — approachable, less intimidating</li>
+      <li>Playful gradient hero, rounded corners, soft card shadows</li>
+      <li>Feels like a friendly fintech app (think Mint, Wealthfront)</li>
+      <li>Extra-bold typography and generous spacing</li>
+    </ul>
+  </div>
+  <div class="frame">
+    <div class="theme-b">
+      <div class="mock-page">
+        <div class="mock-hero">
+          <h1>Review<span>MyTaxes</span></h1>
+          <p>Your free, private tax return preview — no data ever leaves your device</p>
+          <div class="mock-badges">
+            <span class="mock-badge priv">&#x1f512; 100% Private</span>
+            <span class="mock-badge free">&#x2b50; Totally Free</span>
+          </div>
+        </div>
+        <div class="mock-content">
+          <div class="mock-dropzone">
+            <div class="icon">&#x1f4e5;</div>
+            <div class="title">Drop your tax docs here</div>
+            <div class="sub">or click to browse — we support all the common formats</div>
+            <div class="mock-pills">
+              <span class="mock-pill">W-2</span>
+              <span class="mock-pill">1099-INT</span>
+              <span class="mock-pill">1099-DIV</span>
+              <span class="mock-pill">1099-NEC</span>
+              <span class="mock-pill">1099-B</span>
+              <span class="mock-pill">1099-R</span>
+              <span class="mock-pill">1098</span>
+            </div>
+          </div>
+          <div class="mock-btn">Generate My Tax Return Draft &#x2192;</div>
+          <div style="text-align:center;margin-top:14px;font-size:14px;font-weight:800;color:#78716c">or try a sample</div>
+          <div class="mock-demos">
+            <div class="mock-demo"><div class="lbl">&#x1f4bc; Simple W-2</div><div class="desc">Single filer, one W-2</div></div>
+            <div class="mock-demo"><div class="lbl">&#x1f4bb; Freelancer</div><div class="desc">Self-employed + investments</div></div>
+            <div class="mock-demo"><div class="lbl">&#x1f468;&#x200d;&#x1f469;&#x200d;&#x1f467;&#x200d;&#x1f466; Family</div><div class="desc">Joint filers, kids, mortgage</div></div>
+          </div>
+          <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid #e7e5e4;font-size:13px;font-weight:600;color:#a8a29e">Review Screen Preview</div>
+          <div class="mock-summary">
+            <div class="mock-scard"><div class="lbl">Total Income</div><div class="val" style="color:#1c1917">$85,000</div></div>
+            <div class="mock-scard"><div class="lbl">Total Tax</div><div class="val" style="color:#f59e0b">$14,260</div></div>
+            <div class="mock-scard"><div class="lbl">Estimated Refund</div><div class="val" style="color:#059669">$1,140</div></div>
+            <div class="mock-scard"><div class="lbl">Effective Rate</div><div class="val" style="color:#7c3aed">16.8%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OPTION C: Official & Trustworthy -->
+<div class="mockup" id="mock-c">
+  <div class="desc">
+    <h3>Option C: Official & Trustworthy</h3>
+    <ul>
+      <li>IRS-inspired authority — dark navy header, green accents, serif title font</li>
+      <li>Clean government/financial feel — minimal decoration, strong hierarchy</li>
+      <li>Feels like a trusted financial institution (think IRS.gov meets TurboTax)</li>
+      <li>Colored top borders on cards instead of full borders, left accent on demos</li>
+    </ul>
+  </div>
+  <div class="frame">
+    <div class="theme-c">
+      <div class="mock-page">
+        <div class="mock-hero">
+          <h1>Review<span>My</span>Taxes</h1>
+          <p>Free, private draft tax return preview — 100% client-side processing</p>
+          <div class="mock-badges">
+            <span class="mock-badge priv">&#x1f6e1; 100% Private</span>
+            <span class="mock-badge free">&#x2696; Free &amp; Open Source</span>
+          </div>
+        </div>
+        <div class="mock-content">
+          <div class="mock-dropzone">
+            <div class="icon">&#x1f4c4;</div>
+            <div class="title">Upload Tax Documents</div>
+            <div class="sub">Drop files here or click to browse</div>
+            <div class="mock-pills">
+              <span class="mock-pill">W-2</span>
+              <span class="mock-pill">1099-INT</span>
+              <span class="mock-pill">1099-DIV</span>
+              <span class="mock-pill">1099-NEC</span>
+              <span class="mock-pill">1099-B</span>
+              <span class="mock-pill">1099-R</span>
+              <span class="mock-pill">1098</span>
+            </div>
+          </div>
+          <div class="mock-btn">Generate Draft Return</div>
+          <div style="text-align:center;margin-top:14px;font-size:13px;font-weight:600;color:#6b7280">or try with sample data</div>
+          <div class="mock-demos">
+            <div class="mock-demo"><div class="lbl">Simple W-2 Employee</div><div class="desc">Single filer, one W-2, interest &amp; dividends</div></div>
+            <div class="mock-demo"><div class="lbl">Self-Employed</div><div class="desc">Schedule C, capital gains, estimated payments</div></div>
+            <div class="mock-demo"><div class="lbl">Married Filing Jointly</div><div class="desc">Two W-2s, children, mortgage deduction</div></div>
+          </div>
+          <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:13px;font-weight:600;color:#9ca3af">Review Screen Preview</div>
+          <div class="mock-summary">
+            <div class="mock-scard"><div class="lbl">TOTAL INCOME</div><div class="val" style="color:#111827">$85,000</div></div>
+            <div class="mock-scard"><div class="lbl">TOTAL TAX</div><div class="val" style="color:#c2410c">$14,260</div></div>
+            <div class="mock-scard"><div class="lbl">EST. REFUND</div><div class="val" style="color:#047857">$1,140</div></div>
+            <div class="mock-scard"><div class="lbl">EFF. RATE</div><div class="val" style="color:#1d4ed8">16.8%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.mockup').forEach(m => m.classList.remove('active'));
+  document.querySelectorAll('.picker button').forEach(b => b.classList.remove('active'));
+  document.getElementById('mock-' + id).classList.add('active');
+  document.querySelector('.opt-' + id).classList.add('active');
+}
+</script>
+</body>
+</html>

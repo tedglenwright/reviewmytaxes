@@ -425,7 +425,7 @@ function renderUpload() {
       </div>
 
       <div class="drop-zone" id="dropzone">
-        <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.gif,.webp" style="display:none">
+        <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.gif,.webp,.heic,.heif" style="display:none">
         <div class="upload-icon-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -448,7 +448,7 @@ function renderUpload() {
           <span class="doc-pill">SSA-1099</span>
           <span class="doc-pill">1098</span>
         </div>
-        <div class="hint" style="margin-top:10px">PDF, JPG, PNG, TIFF — auto-detected and parsed entirely in your browser</div>
+        <div class="hint" style="margin-top:10px">PDF, JPG, PNG, HEIC, TIFF — auto-detected and parsed entirely in your browser</div>
       </div>
 
       ${STATE.files.length > 0 ? `
@@ -1797,8 +1797,8 @@ function renderDocuments(r) {
 // EVENT HANDLERS
 // ═══════════════════════════════════════════════════════════════
 function addFiles(fileList) {
-  const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp'];
-  const validExts = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp'];
+  const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
+  const validExts = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp', '.heic', '.heif'];
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   let skipped = 0, tooLarge = 0, dupes = 0;
   const existingNames = new Set(STATE.files.map(f => f.name + '_' + f.size));

@@ -18,6 +18,36 @@ async function ensureTesseract() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// LAZY-LOAD HEIC2ANY (only when HEIC files are uploaded)
+// ═══════════════════════════════════════════════════════════════
+let _heicLoading = null;
+async function ensureHeic2Any() {
+  if (typeof heic2any !== 'undefined') return;
+  if (_heicLoading) return _heicLoading;
+  _heicLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load HEIC converter'));
+    document.head.appendChild(script);
+  });
+  return _heicLoading;
+}
+
+function isHEIC(file) {
+  const ext = file.name.toLowerCase().split('.').pop();
+  return ext === 'heic' || ext === 'heif' || file.type === 'image/heic' || file.type === 'image/heif';
+}
+
+async function convertHEICtoJPEG(file) {
+  await ensureHeic2Any();
+  const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+  // heic2any may return array for multi-image HEIC
+  const result = Array.isArray(blob) ? blob[0] : blob;
+  return new File([result], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // OCR DOCUMENT PARSER
 // ═══════════════════════════════════════════════════════════════
 class TaxDocumentParser {
@@ -28,6 +58,19 @@ class TaxDocumentParser {
 
   async parseFile(file) {
     this.onLog(`Parsing: ${file.name}`);
+
+    // Convert HEIC/HEIF to JPEG before processing
+    if (isHEIC(file)) {
+      this.onLog('HEIC image detected — converting to JPEG...');
+      try {
+        file = await convertHEICtoJPEG(file);
+        this.onLog('HEIC conversion complete');
+      } catch (e) {
+        this.onLog('⚠ HEIC conversion failed: ' + (e.message || e));
+        throw new Error('Could not convert HEIC image. Try converting to JPEG or PNG first.');
+      }
+    }
+
     const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
     if (isPDF) {
@@ -61,8 +104,8 @@ class TaxDocumentParser {
         allText += pageText + '\n';
       } else {
         // Scanned/image PDF — render to canvas and OCR
-        this.onLog(`Page ${i}: scanned image detected — running OCR...`);
-        const scale = 2.5;
+        this.onLog(`Page ${i}: scanned/image PDF detected — running OCR...`);
+        const scale = 3.0; // Higher scale for better OCR accuracy on image-only PDFs
         const viewport = page.getViewport({ scale });
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
