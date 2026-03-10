@@ -1004,12 +1004,21 @@ function renderReturn(r) {
           <span>State withholding (should be refunded — no state tax)</span>
           <span style="color:var(--green);font-weight:600">$${fmt(r.totalStateWithheld)}</span>
         </div>` : ''}
-        ` : r.totalStateWithheld > 0 ? `
-        <div style="margin-top:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center">
-          <span>State income tax withheld — select your state for a state estimate</span>
-          <span style="color:var(--text);font-weight:600">$${fmt(r.totalStateWithheld)}</span>
+        ` : `
+        <div style="margin-top:16px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span style="font-size:16px">🏛️</span>
+            <span style="font-weight:600;color:var(--text);font-size:14px">State Tax Estimate</span>
+          </div>
+          ${r.totalStateWithheld > 0 ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">You have <strong style="color:var(--text)">$${fmt(r.totalStateWithheld)}</strong> in state tax withheld — select your state to see if you'll get a refund.</div>` : `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Select your state to see your state income tax estimate.</div>`}
+          <select id="inline-state-select" onchange="handleInlineStateSelect(this.value)" style="width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;cursor:pointer">
+            <option value="">— Select your state —</option>
+            ${Object.entries(STATE_TAX).filter(([k,v]) => k && v.type !== 'none').map(([k,v]) => '<option value="' + k + '">' + v.name + (v.type === 'flat' ? ' (flat ' + (v.rate*100).toFixed(1) + '%)' : '') + '</option>').join('')}
+            <option disabled>──── No income tax ────</option>
+            ${Object.entries(STATE_TAX).filter(([k,v]) => k && v.type === 'none').map(([k,v]) => '<option value="' + k + '">' + v.name + ' (no income tax)</option>').join('')}
+          </select>
         </div>
-        ` : ''}
+        `}
   `;
 
   // Tax Bracket Visualization
@@ -1880,11 +1889,20 @@ async function startParsing() {
     STATE.ocrProgress = 0;
     render();
     try {
-      const doc = await parser.parseFile(STATE.files[i]);
-      if (doc) {
-        doc._sourceURL = URL.createObjectURL(STATE.files[i]);
-        doc._sourceFileName = STATE.files[i].name;
-        STATE.parsedDocs.push(doc);
+      const result = await parser.parseFile(STATE.files[i]);
+      const sourceURL = URL.createObjectURL(STATE.files[i]);
+      const sourceFileName = STATE.files[i].name;
+      // parseFile may return a single doc, an array of docs, or null
+      const docs = Array.isArray(result) ? result : (result ? [result] : []);
+      for (const doc of docs) {
+        if (doc) {
+          doc._sourceURL = sourceURL;
+          doc._sourceFileName = sourceFileName;
+          STATE.parsedDocs.push(doc);
+        }
+      }
+      if (docs.length > 1) {
+        STATE.ocrLogs.push({ text: `Consolidated statement: found ${docs.length} forms (${docs.map(d => d.type).join(', ')})`, type: 'highlight' });
       }
     } catch (err) {
       const msg = err && err.message ? err.message : String(err);
@@ -1984,10 +2002,14 @@ async function handleAdditionalUpload(event) {
   for (const file of files) {
     try {
       const result = await parser.parseFile(file);
-      if (result) {
-        result._sourceURL = URL.createObjectURL(file);
-        result._sourceFileName = file.name;
-        newDocs.push(result);
+      const sourceURL = URL.createObjectURL(file);
+      const docs = Array.isArray(result) ? result : (result ? [result] : []);
+      for (const doc of docs) {
+        if (doc) {
+          doc._sourceURL = sourceURL;
+          doc._sourceFileName = file.name;
+          newDocs.push(doc);
+        }
       }
     } catch(e) {
       console.error('Error parsing additional file:', e);
@@ -2123,6 +2145,14 @@ function clearAllData() {
 function setTab(t) {
   rlog('TAB_CHANGE', t);
   STATE.tab = t;
+  render();
+}
+
+function handleInlineStateSelect(val) {
+  if (val !== undefined) STATE.taxData.stateCode = val;
+  STATE.answeredQs.add('select_state');
+  STATE.result = computeTaxReturn(STATE.taxData);
+  rlog('INLINE_STATE_SELECT', val);
   render();
 }
 

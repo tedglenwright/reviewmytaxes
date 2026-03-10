@@ -174,7 +174,8 @@ class TaxDocumentParser {
       return null;
     }
 
-    return this.classifyAndExtract(allText, file.name);
+    // Use classifyAndExtractAll to handle consolidated statements (multiple forms in one PDF)
+    return this.classifyAndExtractAll(allText, file.name);
   }
 
   // Layout-aware text extraction: groups items into rows by Y-coordinate,
@@ -270,7 +271,7 @@ class TaxDocumentParser {
       });
       const text = result.data.text;
       this.onLog(`OCR complete — ${text.length} characters extracted`);
-      return this.classifyAndExtract(text, file.name);
+      return this.classifyAndExtractAll(text, file.name);
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -315,11 +316,13 @@ class TaxDocumentParser {
 
       if (combinedText.trim().length < 20) continue;
 
-      // Try to classify this sheet
-      const doc = this.classifyAndExtract(combinedText, file.name);
-      if (doc) {
-        this.onLog(`Sheet "${sheetName}": Detected ${doc.type}`);
-        allDocs.push(doc);
+      // Try to classify this sheet (may return multiple forms from consolidated sheets)
+      const docs = this.classifyAndExtractAll(combinedText, file.name);
+      for (const doc of docs) {
+        if (doc) {
+          this.onLog(`Sheet "${sheetName}": Detected ${doc.type}`);
+          allDocs.push(doc);
+        }
       }
     }
 
@@ -333,24 +336,80 @@ class TaxDocumentParser {
         const sheet = workbook.Sheets[name];
         allText += name + '\n' + XLSX.utils.sheet_to_csv(sheet, { FS: '\t', RS: '\n', blankrows: false }) + '\n\n';
       }
-      const doc = this.classifyAndExtract(allText, file.name);
+      const docs = this.classifyAndExtractAll(allText, file.name);
       this.onProgress(100);
-      if (doc) {
-        this.onLog(`Detected: ${doc.type} from combined sheets`);
-        return doc;
+      if (docs.length > 0 && docs[0]) {
+        this.onLog(`Detected: ${docs.map(d => d.type).join(', ')} from combined sheets`);
+        return docs; // Return all found docs
       }
       this.onLog('⚠ Could not identify any tax forms in this spreadsheet');
       return null;
     }
 
     this.onProgress(100);
+    this.onLog(`Found ${allDocs.length} tax form(s) in this workbook: ${allDocs.map(d => d.type).join(', ')}`);
+    return allDocs; // Return all docs
+  }
 
-    // If multiple docs found (e.g. a workbook with 1099-INT on one sheet and 1099-DIV on another)
-    // Return the first one; the others will need separate handling
-    if (allDocs.length > 1) {
-      this.onLog(`Found ${allDocs.length} tax forms in this workbook — using first: ${allDocs[0].type}`);
+  // Detect all form types present in the text (for consolidated statements)
+  _detectFormTypes(text) {
+    const upper = text.toUpperCase();
+    const types = [];
+    if (upper.includes('1099-INT') || upper.includes('INTEREST INCOME')) types.push('1099int');
+    if (upper.includes('1099-DIV') || upper.includes('DIVIDENDS AND DISTRIBUTIONS')) types.push('1099div');
+    if (upper.includes('1099-B') || upper.includes('PROCEEDS FROM BROKER')) types.push('1099b');
+    if (upper.includes('1099-NEC') || upper.includes('NONEMPLOYEE COMPENSATION')) types.push('1099nec');
+    if (upper.includes('1099-MISC') || upper.includes('MISCELLANEOUS')) types.push('1099misc');
+    if (upper.includes('1099-R') || upper.includes('DISTRIBUTIONS FROM PENSIONS')) types.push('1099r');
+    if (upper.includes('1099-SA') || (upper.includes('HSA') && upper.includes('DISTRIBUTION'))) types.push('1099sa');
+    if (upper.includes('1099-G') || upper.includes('GOVERNMENT PAYMENTS') || upper.includes('UNEMPLOYMENT COMPENSATION')) types.push('1099g');
+    if (upper.includes('SSA-1099') || upper.includes('SOCIAL SECURITY BENEFIT')) types.push('ssa1099');
+    if (upper.includes('WAGE AND TAX STATEMENT') || /FORM\s+W[\s-]*2\b/.test(upper)) types.push('w2');
+    if (upper.includes('1098') || upper.includes('MORTGAGE INTEREST')) types.push('1098');
+    return types;
+  }
+
+  // Parse ALL detected form types from a consolidated statement
+  classifyAndExtractAll(text, filename) {
+    const upper = text.toUpperCase();
+    const fname = filename.toUpperCase();
+    const detected = this._detectFormTypes(text);
+
+    // If 2+ form types detected, this is a consolidated statement — parse each
+    if (detected.length >= 2) {
+      this.onLog(`Consolidated statement detected — found ${detected.length} form types: ${detected.join(', ')}`);
+      const results = [];
+      for (const formType of detected) {
+        try {
+          const doc = this._parseByType(formType, text, fname);
+          if (doc) results.push(doc);
+        } catch (e) {
+          this.onLog(`⚠ Error parsing ${formType}: ${e.message || e}`);
+        }
+      }
+      return results.length > 0 ? results : [this.classifyAndExtract(text, filename)];
     }
-    return allDocs[0];
+
+    // Single form — use original logic
+    return [this.classifyAndExtract(text, filename)];
+  }
+
+  // Parse a specific form type from text
+  _parseByType(formType, text, fname) {
+    switch (formType) {
+      case 'w2': return this.parseW2(text);
+      case '1099int': return this.parse1099INT(text);
+      case '1099div': return this.parse1099DIV(text);
+      case '1099nec': return this.parse1099NEC(text);
+      case '1099b': return this.parse1099B(text);
+      case '1099misc': return this.parse1099MISC(text);
+      case '1099r': return this.parse1099R(text);
+      case 'ssa1099': return this.parseSSA1099(text);
+      case '1099sa': return this.parse1099SA(text);
+      case '1099g': return this.parse1099G(text);
+      case '1098': return this.parse1098(text);
+      default: return null;
+    }
   }
 
   classifyAndExtract(text, filename) {
@@ -454,9 +513,20 @@ class TaxDocumentParser {
     const employer = this.findEmployer(norm);
 
     // Extract state code from Box 15 (2-letter state abbreviation)
-    const stateCodeMatch = norm.match(/(?:box\s*15|state\s*(?:\/\s*)?(?:employer|payer)?\s*(?:state\s*)?(?:ID|code|no)?)[\s:]*([A-Z]{2})\b/i)
-      || norm.match(/\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\s*\d{2,}/);
+    const stateAbbrs = 'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC';
+    const stateCodeMatch =
+      // "Box 15" or "15" followed by state code
+      norm.match(/(?:box\s*15|state\s*(?:\/\s*)?(?:employer|payer)?\s*(?:state\s*)?(?:ID|code|no)?)[\s:]*([A-Z]{2})\b/i)
+      // State abbreviation followed by state EIN (e.g., "CA 123-456-7890")
+      || norm.match(new RegExp(`\\b(${stateAbbrs})\\s*\\d{2,}`, 'i'))
+      // "15" on its own line or after whitespace, then state code on same/next line
+      || norm.match(new RegExp(`(?:^|\\n)\\s*15\\s+.{0,30}?(${stateAbbrs})\\b`, 'im'))
+      // State code appearing near "state wages" or "state income tax" context
+      || norm.match(new RegExp(`\\b(${stateAbbrs})\\s+(?:state\\s+)?(?:wages|income|tax)`, 'i'))
+      // State code on a line by itself or with just numbers (common OCR output)
+      || norm.match(new RegExp(`(?:^|\\n)\\s*(${stateAbbrs})\\s*[\\d$,.]`, 'im'));
     const w2StateCode = stateCodeMatch ? stateCodeMatch[1].toUpperCase() : undefined;
+    this.onLog(`State code detection: ${w2StateCode || 'not found'}`);
 
     // Log first ~500 chars of extracted text for diagnostics
     this.onLog('--- Extracted text preview ---');
