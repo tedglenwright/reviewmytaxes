@@ -48,6 +48,36 @@ async function convertHEICtoJPEG(file) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// LAZY-LOAD SHEETJS (only when Excel/CSV files are uploaded)
+// ═══════════════════════════════════════════════════════════════
+let _sheetjsLoading = null;
+async function ensureSheetJS() {
+  if (typeof XLSX !== 'undefined') return;
+  if (_sheetjsLoading) return _sheetjsLoading;
+  _sheetjsLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load SheetJS Excel parser'));
+    document.head.appendChild(script);
+  });
+  return _sheetjsLoading;
+}
+
+function isSpreadsheet(file) {
+  const ext = file.name.toLowerCase().split('.').pop();
+  const spreadsheetExts = ['xlsx', 'xls', 'csv', 'tsv', 'ods', 'gsheet'];
+  const spreadsheetTypes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'text/csv',
+    'text/tab-separated-values',
+    'application/vnd.oasis.opendocument.spreadsheet',
+  ];
+  return spreadsheetExts.includes(ext) || spreadsheetTypes.includes(file.type);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // OCR DOCUMENT PARSER
 // ═══════════════════════════════════════════════════════════════
 class TaxDocumentParser {
@@ -71,8 +101,12 @@ class TaxDocumentParser {
       }
     }
 
-    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    // Route by file type
+    if (isSpreadsheet(file)) {
+      return this.parseSpreadsheet(file);
+    }
 
+    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (isPDF) {
       return this.parsePDF(file);
     } else {
@@ -240,6 +274,83 @@ class TaxDocumentParser {
     } finally {
       URL.revokeObjectURL(url);
     }
+  }
+
+  async parseSpreadsheet(file) {
+    this.onLog('Spreadsheet detected — loading Excel parser...');
+    await ensureSheetJS();
+    this.onLog('Parsing spreadsheet...');
+    this.onProgress(20);
+
+    const arrayBuffer = await file.arrayBuffer();
+    const ext = file.name.toLowerCase().split('.').pop();
+
+    let workbook;
+    try {
+      workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+    } catch (e) {
+      this.onLog('⚠ Could not parse spreadsheet: ' + (e.message || e));
+      return null;
+    }
+
+    this.onLog(`Found ${workbook.SheetNames.length} sheet(s): ${workbook.SheetNames.join(', ')}`);
+
+    // Try each sheet — some workbooks have a summary sheet + detail sheets
+    let allDocs = [];
+    for (let si = 0; si < workbook.SheetNames.length; si++) {
+      const sheetName = workbook.SheetNames[si];
+      const sheet = workbook.Sheets[sheetName];
+      this.onProgress(20 + Math.round((si / workbook.SheetNames.length) * 60));
+
+      // Convert sheet to text in two ways for best classification:
+      // 1) Tab-separated text (preserves layout for classifyAndExtract)
+      const textRows = XLSX.utils.sheet_to_csv(sheet, { FS: '\t', RS: '\n', blankrows: false });
+      // 2) Also try as flat text with labels
+      const jsonRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const flatText = jsonRows.map(row => row.join(' ')).join('\n');
+
+      const combinedText = sheetName + '\n' + textRows + '\n' + flatText;
+
+      this.onLog(`Sheet "${sheetName}": ${jsonRows.length} rows, ${combinedText.length} chars`);
+
+      if (combinedText.trim().length < 20) continue;
+
+      // Try to classify this sheet
+      const doc = this.classifyAndExtract(combinedText, file.name);
+      if (doc) {
+        this.onLog(`Sheet "${sheetName}": Detected ${doc.type}`);
+        allDocs.push(doc);
+      }
+    }
+
+    this.onProgress(90);
+
+    if (allDocs.length === 0) {
+      // Fall back: combine all sheets and try once more
+      this.onLog('No forms detected per-sheet — trying combined extraction...');
+      let allText = '';
+      for (const name of workbook.SheetNames) {
+        const sheet = workbook.Sheets[name];
+        allText += name + '\n' + XLSX.utils.sheet_to_csv(sheet, { FS: '\t', RS: '\n', blankrows: false }) + '\n\n';
+      }
+      const doc = this.classifyAndExtract(allText, file.name);
+      this.onProgress(100);
+      if (doc) {
+        this.onLog(`Detected: ${doc.type} from combined sheets`);
+        return doc;
+      }
+      this.onLog('⚠ Could not identify any tax forms in this spreadsheet');
+      return null;
+    }
+
+    this.onProgress(100);
+
+    // If multiple docs found (e.g. a workbook with 1099-INT on one sheet and 1099-DIV on another)
+    // Return the first one; the others will need separate handling
+    if (allDocs.length > 1) {
+      this.onLog(`Found ${allDocs.length} tax forms in this workbook — using first: ${allDocs[0].type}`);
+    }
+    return allDocs[0];
   }
 
   classifyAndExtract(text, filename) {

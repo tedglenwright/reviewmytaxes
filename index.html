@@ -425,7 +425,7 @@ function renderUpload() {
       </div>
 
       <div class="drop-zone" id="dropzone">
-        <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.gif,.webp,.heic,.heif" style="display:none">
+        <input type="file" id="fileinput" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.gif,.webp,.heic,.heif,.xlsx,.xls,.csv,.tsv,.ods" style="display:none">
         <div class="upload-icon-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-light)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -448,7 +448,7 @@ function renderUpload() {
           <span class="doc-pill">SSA-1099</span>
           <span class="doc-pill">1098</span>
         </div>
-        <div class="hint" style="margin-top:10px">PDF, JPG, PNG, HEIC, TIFF — auto-detected and parsed entirely in your browser</div>
+        <div class="hint" style="margin-top:10px">PDF, Excel, CSV, JPG, PNG, HEIC — auto-detected and parsed entirely in your browser</div>
       </div>
 
       ${STATE.files.length > 0 ? `
@@ -1784,7 +1784,7 @@ function renderDocuments(r) {
       <div style="color:var(--text-muted);font-size:12px;margin-bottom:12px">Upload additional W-2s, 1099s, 1098s, or SSA-1099s to refine your return</div>
       <label style="display:inline-block;padding:10px 24px;background:${needsPayment ? 'var(--green)' : 'var(--accent)'};color:#fff;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.2s">
         ${needsPayment ? 'Pay $5 → Upload More' : 'Upload More Documents'}
-        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp" style="display:none" onchange="handleAdditionalUpload(event)">
+        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp,.heic,.heif,.xlsx,.xls,.csv,.tsv,.ods" style="display:none" onchange="handleAdditionalUpload(event)">
       </label>
       <div style="color:var(--text-dim);font-size:11px;margin-top:8px">Each upload counts as 1 question · $5 each</div>
     </div>
@@ -1797,8 +1797,8 @@ function renderDocuments(r) {
 // EVENT HANDLERS
 // ═══════════════════════════════════════════════════════════════
 function addFiles(fileList) {
-  const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
-  const validExts = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp', '.heic', '.heif'];
+  const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv', 'text/tab-separated-values', 'application/vnd.oasis.opendocument.spreadsheet'];
+  const validExts = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp', '.heic', '.heif', '.xlsx', '.xls', '.csv', '.tsv', '.ods'];
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   let skipped = 0, tooLarge = 0, dupes = 0;
   const skippedNames = [];
@@ -2841,7 +2841,7 @@ function getAssumptionForm(id) {
           <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px">Upload closing statements, HUD-1, exchange agreement, or Form 8824</div>
           <label style="display:inline-block;padding:6px 16px;background:var(--accent);color:#fff;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">
             Upload 1031 Documents
-            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp" style="display:none" onchange="handle1031Upload(event)">
+            <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp,.heic,.heif,.xlsx,.xls,.csv,.tsv,.ods" style="display:none" onchange="handle1031Upload(event)">
           </label>
           <div id="1031-docs-list" style="margin-top:8px;font-size:11px;color:var(--text-muted)"></div>
         </div>
