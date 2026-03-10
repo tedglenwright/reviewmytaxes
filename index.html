@@ -1903,7 +1903,14 @@ async function startParsing() {
   // Small delay then show results
   setTimeout(() => {
     if (STATE.parsedDocs.length > 0) {
+      const beforeCount = STATE.parsedDocs.length;
       STATE.taxData = aggregateParsedDocs(STATE.parsedDocs);
+      // Check if duplicates were removed
+      const totalAfter = (STATE.taxData.w2s || []).length + (STATE.taxData.interest || []).length + (STATE.taxData.dividends || []).length;
+      const dupsRemoved = beforeCount - totalAfter;
+      if (dupsRemoved > 0) {
+        showToast(`${dupsRemoved} duplicate document${dupsRemoved > 1 ? 's' : ''} detected and merged`, 'info');
+      }
       STATE.result = safeCompute(STATE.taxData);
       STATE.originalResult = { ...STATE.result };
       STATE.screen = 'review';

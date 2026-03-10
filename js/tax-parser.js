@@ -870,36 +870,118 @@ class TaxDocumentParser {
 // ═══════════════════════════════════════════════════════════════
 // AGGREGATE PARSED DOCUMENTS INTO TAX DATA
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// DUPLICATE DETECTION HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+// Normalize employer/payer names for comparison (strip whitespace, punctuation, case)
+function normalizeName(name) {
+  return (name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+// Check if two dollar amounts are "the same" (within 1% or $1 tolerance)
+function amountsMatch(a, b) {
+  if (a === 0 && b === 0) return true;
+  if (a === 0 || b === 0) return false;
+  const diff = Math.abs(a - b);
+  return diff <= 1 || diff / Math.max(a, b) < 0.01;
+}
+
+// Check if a W-2 is a duplicate of an existing one
+function isW2Duplicate(existing, candidate) {
+  // Same employer name AND same wages → duplicate
+  if (normalizeName(existing.employer) === normalizeName(candidate.employer) && amountsMatch(existing.wages, candidate.wages)) {
+    return true;
+  }
+  // Same wages AND same fed withheld → likely duplicate even if employer name differs slightly
+  if (amountsMatch(existing.wages, candidate.wages) && amountsMatch(existing.fedWithheld, candidate.fedWithheld) && existing.wages > 0) {
+    return true;
+  }
+  return false;
+}
+
+// Check if a 1099-INT is a duplicate
+function is1099IntDuplicate(existing, candidate) {
+  return normalizeName(existing.payer) === normalizeName(candidate.payer) && amountsMatch(existing.amount, candidate.amount);
+}
+
+// Check if a 1099-DIV is a duplicate
+function is1099DivDuplicate(existing, candidate) {
+  return normalizeName(existing.payer) === normalizeName(candidate.payer) && amountsMatch(existing.ordinary, candidate.ordinary);
+}
+
+// Generic duplicate check for docs with payer + single amount field
+function isPayerAmountDuplicate(existing, candidate, amountField) {
+  return normalizeName(existing.payer) === normalizeName(candidate.payer) && amountsMatch(existing[amountField] || 0, candidate[amountField] || 0);
+}
+
 function aggregateParsedDocs(docs) {
   const data = { w2s: [], interest: [], dividends: [], capitalGains: [], estimatedPayments: 0 };
   let necTotal = 0;
+  let necSources = [];
   let mortgageInterest = 0;
   let propertyTax = 0;
+  let dupsSkipped = 0;
 
   for (const doc of docs) {
     if (!doc) continue;
     switch (doc.type) {
-      case 'w2':
-        data.w2s.push({ employer: doc.employer, wages: doc.wages, fedWithheld: doc.fedWithheld, stateWithheld: doc.stateWithheld, stateCode: doc.stateCode, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
+      case 'w2': {
+        const w2Entry = { employer: doc.employer, wages: doc.wages, fedWithheld: doc.fedWithheld, stateWithheld: doc.stateWithheld, stateCode: doc.stateCode, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName };
+        if (data.w2s.some(existing => isW2Duplicate(existing, w2Entry))) {
+          dupsSkipped++;
+          rlog('DUPLICATE_SKIPPED', { type: 'w2', employer: doc.employer, wages: doc.wages });
+        } else {
+          data.w2s.push(w2Entry);
+        }
         break;
-      case '1099int':
-        data.interest.push({ payer: doc.payer, amount: doc.amount, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
+      }
+      case '1099int': {
+        const entry = { payer: doc.payer, amount: doc.amount, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName };
+        if (data.interest.some(existing => is1099IntDuplicate(existing, entry))) {
+          dupsSkipped++;
+          rlog('DUPLICATE_SKIPPED', { type: '1099int', payer: doc.payer, amount: doc.amount });
+        } else {
+          data.interest.push(entry);
+        }
         break;
-      case '1099div':
-        data.dividends.push({ payer: doc.payer, ordinary: doc.ordinary, qualified: doc.qualified, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
+      }
+      case '1099div': {
+        const entry = { payer: doc.payer, ordinary: doc.ordinary, qualified: doc.qualified, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName };
+        if (data.dividends.some(existing => is1099DivDuplicate(existing, entry))) {
+          dupsSkipped++;
+          rlog('DUPLICATE_SKIPPED', { type: '1099div', payer: doc.payer, ordinary: doc.ordinary });
+        } else {
+          data.dividends.push(entry);
+        }
         break;
-      case '1099nec':
-        necTotal += doc.amount;
-        if (doc._sourceURL) data._necSources = (data._necSources || []).concat({ _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName, amount: doc.amount });
+      }
+      case '1099nec': {
+        const necKey = normalizeName(doc.payer || doc._sourceFileName) + '_' + (doc.amount || 0).toFixed(0);
+        if (!necSources.some(s => normalizeName(s.payer || s._sourceFileName) + '_' + (s.amount || 0).toFixed(0) === necKey)) {
+          necTotal += doc.amount;
+          necSources.push({ _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName, amount: doc.amount, payer: doc.payer });
+        } else {
+          dupsSkipped++;
+          rlog('DUPLICATE_SKIPPED', { type: '1099nec', amount: doc.amount });
+        }
         break;
+      }
       case '1099b':
         doc.transactions.forEach(t => { t._sourceURL = doc._sourceURL; t._sourceFileName = doc._sourceFileName; });
         data.capitalGains.push(...doc.transactions);
         break;
-      case '1099r':
+      case '1099r': {
         if (!data.retirementDist) data.retirementDist = [];
-        data.retirementDist.push({ payer: doc.payer, grossDistribution: doc.grossDistribution, taxableAmount: doc.taxableAmount, fedWithheld: doc.fedWithheld || 0, stateWithheld: doc.stateWithheld || 0, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName });
+        const rEntry = { payer: doc.payer, grossDistribution: doc.grossDistribution, taxableAmount: doc.taxableAmount, fedWithheld: doc.fedWithheld || 0, stateWithheld: doc.stateWithheld || 0, _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName };
+        if (data.retirementDist.some(existing => isPayerAmountDuplicate(existing, rEntry, 'grossDistribution'))) {
+          dupsSkipped++;
+          rlog('DUPLICATE_SKIPPED', { type: '1099r', payer: doc.payer, grossDistribution: doc.grossDistribution });
+        } else {
+          data.retirementDist.push(rEntry);
+        }
         break;
+      }
       case '1098':
         mortgageInterest += doc.mortgageInterest || 0;
         propertyTax += doc.propertyTax || 0;
@@ -918,12 +1000,19 @@ function aggregateParsedDocs(docs) {
         data.unemploymentIncome = (data.unemploymentIncome || 0) + (doc.unemployment || 0);
         data.stateRefund1099G = (data.stateRefund1099G || 0) + (doc.stateRefund || 0);
         if (doc.fedWithheld) {
-          // Add to estimated payments as withholding
           data.estimatedPayments = (data.estimatedPayments || 0) + doc.fedWithheld;
         }
         if (doc._sourceURL) data._govSources = (data._govSources || []).concat({ _sourceURL: doc._sourceURL, _sourceFileName: doc._sourceFileName, unemployment: doc.unemployment, payer: doc.payer });
         break;
     }
+  }
+
+  if (dupsSkipped > 0) {
+    rlog('DUPLICATES_REMOVED', { count: dupsSkipped });
+  }
+
+  if (necSources.length > 0) {
+    data._necSources = necSources;
   }
 
   // Auto-detect state from W-2s
@@ -948,9 +1037,17 @@ function aggregateParsedDocs(docs) {
     data.itemized = { medical: 0, stateTaxes: 0, propertyTaxes: propertyTax, mortgageInterest, charitableCash: 0, charitableNonCash: 0 };
   }
 
-  // Infer filing status from number of W-2s
+  // Infer filing status: only assume MFJ if W-2s have DIFFERENT employers
+  // (same employer or duplicate uploads should not trigger MFJ)
   if (data.w2s.length >= 2) {
-    data.filingStatus = 'mfj';
+    const uniqueEmployers = new Set(data.w2s.map(w => normalizeName(w.employer)));
+    if (uniqueEmployers.size >= 2) {
+      // Two genuinely different W-2s — could be MFJ or single with two jobs
+      // Default to single; user can change in the assumptions tab
+      data.filingStatus = 'single';
+    } else {
+      data.filingStatus = 'single';
+    }
   } else {
     data.filingStatus = 'single';
   }
