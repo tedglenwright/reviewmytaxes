@@ -1,0 +1,14 @@
+{
+  "name": "reviewmytaxes",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
